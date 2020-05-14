@@ -1,5 +1,5 @@
 ## PROJECT:  COVID-19 Impact Analytics
-## AUTHOR:   T.Essam | USAID
+## AUTHOR:   B.Kagniniwa | USAID
 ## LICENSE:  MIT
 ## PURPOSE:  Extract Geodata from GADM
 ## Date:     2020-05-14
