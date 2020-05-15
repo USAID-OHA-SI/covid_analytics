@@ -16,7 +16,7 @@ library(RColorBrewer)
 
 # GLOBAL --------------------------------------------------------
 
-folder_setup()
+#folder_setup()
 
 dir_data <- "Data"
 dir_gis <- "GIS"
@@ -64,6 +64,7 @@ dir_gis <- "GIS"
   nga1 <- nga1 %>% 
     dplyr::select(hasc = hasc_1, name = name_1) %>% 
     dplyr::mutate(hasc = substr(hasc, 4,5))
+  
 
   nga1 %>% 
     st_geometry() %>% 
