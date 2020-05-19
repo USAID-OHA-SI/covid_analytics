@@ -23,6 +23,7 @@ library(ggthemes)
 dir_data <- "Data"
 dir_gis <- "GIS"
 dir_graphics <- "Graphics"
+dir_images <- "Images"
 
 ncdc <- "https://covid19.ncdc.gov.ng/"
 tbl <- "table#custom1"
@@ -63,7 +64,7 @@ tbl <- "table#custom1"
     print(viz)
     
     if (viz_save == TRUE) {
-      ggsave(filename = paste0(dir_graphics, "/", viz_title, ".png"),
+      ggsave(filename = paste0(dir_images, "/", viz_title, ".png"),
              width = 11, height = 8)
     }
     

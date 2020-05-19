@@ -28,7 +28,15 @@ dir_gis <- "GIS"
     # Read data form local dir first
     downlaod <- local != TRUE
     
-    geo_data <- getData("GADM", 
+    # geodata location
+    path_gis = here()
+    
+    if (dir.exists(here("gis"))) {
+      path_gis <- here("gis")
+    }
+    
+    # Extract data from GADM
+    geo_data <- raster::getData("GADM", 
                         country = country_name, 
                         level = adm_level,
                         download = downlaod,
