@@ -6,7 +6,7 @@
 # ANALYTICAL PLOTS --------------------------------------------------------
 
   #BIG PICTURE FIRST
-  hfr_balanced %>% 
+  hfr%>% 
     filter(indicator %in% ind_order) %>% 
     group_by(indicator, date) %>% 
     summarise(value = sum(value, na.rm = TRUE)) %>% 
