@@ -11,13 +11,13 @@
 library(tidyverse)
 library(glitr)
 library(readxl)
-library(vroom)
 library(here)
 library(glitr)
 library(glamr)
 library(ISOcodes)
 library(rvest)
 library(scales)
+library(COVIDutilities)
 
 # GLOBALS -----------------------------------------------------------------
  
@@ -46,10 +46,7 @@ library(scales)
   nga_holiday <- as.Date("2019-12-25")
                         
   # Extract government measures data    
-  hdx_gm <- c("https://data.humdata.org/dataset/acaps-covid19-government-measures-dataset")
-  link_id = c("a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics ga-download']")
-  
-  df_gm <- extract_excel_data(hdx_gm, link_id, 2, 'xlsx') %>%
+  df_gm <- extract_excel_data(hdx_govmes_url, hdx_govmes_linkid, 2, 'xlsx') %>%
     filter(iso == "NGA") 
   
     
@@ -74,26 +71,62 @@ library(scales)
     filter(!is.na(mech_code)) %>% 
     mutate(mech_code = gsub("(^[[:space:]]*)|([[:space:]]*$)", "", mech_code),
            indicator = gsub("HFR-", "", indicator)) %>% 
-    arrange(orgunituid, indicator, date) %>% 
+    arrange(orgunituid, indicator, date)
     
-    # Check for duplicates
-    group_by_all() %>% 
-    mutate(rowcount = n()) %>% 
-    distinct_all(.keep_all = FALSE) %>% 
-    ungroup() %>% 
-    select(-rowcount) %>% 
-    group_by_at(vars(-value)) %>% 
-    mutate(rowcount2 = n()) %>%
-    
-    #Fix duplicate entries
-    summarise(value = max(value, na.rm = TRUE)) %>% 
-    mutate(rowcount2 = n()) %>% 
-    ungroup() %>% 
-    select(-rowcount2)
+   # Fixing duplicates, flagging KP partners and flagging site transitions 
+    hfr <- 
+      hfr %>% 
+      group_by_all() %>% 
+      mutate(rowcount = n()) %>% 
+      distinct_all(.keep_all = FALSE) %>% 
+      ungroup() %>% 
+      dplyr::select(-rowcount) %>% 
+      group_by_at(vars(-value)) %>% 
+      mutate(rowcount2 = n()) %>%
+      summarise(value = max(value, na.rm = TRUE)) %>% 
+      ungroup() %>% 
+      mutate(kp_partner = case_when(
+        partner == "SFH KP Care 2" ~ 1,
+        partner == "Heartland Alliance KP Care 1" ~ 1,
+        TRUE ~ 0
+      ))
+      
+      
+      
+      
+      
+      hfr %>% 
+      filter(state == "Adamawa State") %>% 
+        count(state, indicator, orgunit, orgunituid, partner, mech_code, date) %>% 
+        spread(date, n) %>% 
+        write_csv(., here(data_out, "NGA_HFR_count_all_wide.csv"))
+  
+  
+  
+  
   
   hfr %>% 
     count(state, partner, date, mech_code, indicator) %>% spread(date, n) %>% 
     write_csv(., here(data_out, "NGA_HFR_count_all_indic_wide.csv"))
+  
+
+# HFR DATA UPDATE & MUNGING RESPONSE --------------------------------------
+
+  # So Nigeria HFR data is a unique case where you have partner shifts occuring during the year.
+  # MSH transitioned sites in 5 States (Niger, Kwara, Kebbi, Sokoto & Zamfara) to ChemonicsTO1 in Q2
+  # FHI360 SIDHAS transitioned sites to FHI360 TO2 (EDO, Bayelsa & Lagos) in March 2020. IN HFR
+  # TO2 will start reporting April 1st.
+  # FHI360 SIDHAS is transiting sites to CHEMONICS TO3 in other states with reporting starting from April 1st.
+  
+  # DECISION: given these site shifts, the analysis at the IP level is likely not useful. Instead, we propose aalyzing site level data and remain ambivalent about who is implementing. We will include partner_shift flags accordingly to track shifts. We also will check for duplicate reporting within a site with a partner shift. There is no need to balance the panel out, instead we will work with an unbalanced panel and those sites with missing data are assumed to be non-reporting.
+  
+  date_seq <- hfr %>% distinct(date) %>% mutate(period = row_number())
+  
+  
+  
+  
+  
+  
   
   
   
@@ -103,7 +136,7 @@ library(scales)
   # fix one problem child:
   # 2019-10-21	ak Akwa-Ibom State	Mercy Hospital	mVf7HZsDkRn	81858	TMEC-RISE	HTS_TST	93	Nigeria	Akwa-Ibom State
   
-  date_seq <- hfr %>% distinct(date) %>% mutate(period = row_number())
+
   
   hfr_balanced <- 
     hfr %>% 
