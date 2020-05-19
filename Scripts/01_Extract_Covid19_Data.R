@@ -18,6 +18,7 @@ library(lubridate)    # Date parser
 # GLOBAL --------------------------------------------------------
 
 dir_data <- "Data"
+dir_dataout <- "Dataout"
 
 ncdc <- "https://covid19.ncdc.gov.ng/"
 tbl <- "table#custom1"
@@ -40,7 +41,7 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
   
   # Export 
   nga_covid %>% 
-    write_csv(path = paste0(dir_data, "/nga_ncdc_covid_data.csv"), na = "")
+    write_csv(path = paste0(dir_dataout, "/nga_ncdc_covid_data.csv"), na = "")
 
   # Government Measures
   
@@ -62,5 +63,5 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
   
   # Export 
   nga_govm %>% 
-    write_csv(path = paste0(dir_data, "/nga_acaps_gov_measures_data.csv"), na = "")
+    write_csv(path = paste0(dir_dataout, "/nga_acaps_gov_measures_data.csv"), na = "")
   

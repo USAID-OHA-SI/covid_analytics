@@ -71,11 +71,11 @@ tbl <- "table#custom1"
   }
   
   # Bar charts => NOT WORKING!
-  bar_char <- function(dataset, viz_attr) {
+  bar_chart <- function(dataset, viz_attr) {
     
     viz <- dataset %>% 
-      dplyr::filter(!is.na(no_of_deaths) & no_of_deaths != 0) %>% 
-      ggplot(aes_string(reorder(state, viz_attr), viz_attr, fill=viz_attr)) +
+      dplyr::filter(!is.na(!!viz_attr) & !!viz_attr != 0) %>% 
+      ggplot(aes(reorder(state, !!viz_attr), !!viz_attr, fill=!!viz_attr)) +
       geom_col(color = gray(.8), lwd=.1, show.legend = F) +
       scale_fill_gradient2(low='yellow',  high='brown') +
       coord_flip() +

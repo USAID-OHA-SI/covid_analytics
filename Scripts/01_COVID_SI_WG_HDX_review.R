@@ -31,7 +31,7 @@ prinf <- function(df) {
   
   url <- "https://data.humdata.org/dataset/e1a91ae0-292d-4434-bc75-bf863d4608ba/resource/e571077a-53b6-4941-9c02-ec3214d17714/download/20200421-acaps-covid-19-goverment-measures-dataset-v9.xlsx"
   covid <- basename(url)
-  # download.file(url, file.path(data_in, basename(url)))
+  #download.file(url, file.path(data_in, basename(url)))
   # Does not work until you open file and unprotect it
 
 # Grab PEPFAR OUS
@@ -41,7 +41,8 @@ prinf <- function(df) {
     distinct(countryname, operatingunit)
 
 # READ IN HDX COVID MEASURES DATA 
-  read_path <- file.path(data_in, covid)
+  #read_path <- file.path(data_in, covid)
+  read_path <- file.path(data_in, "acaps_covid19_government_measures_dataset.xlsx")
    
    dfl <- 
     read_path %>% 
@@ -113,6 +114,7 @@ prinf <- function(df) {
           plot.caption = element_text(hjust = 1)) 
 
  si_save("Images/PEPFAR_COVID_OU_Measures.png", scale = 1.45)
+ #ggsave("Images/PEPFAR_COVID_OU_Measures.png", scale = 1.45)
  
  
 # When did a country first enact a measure
