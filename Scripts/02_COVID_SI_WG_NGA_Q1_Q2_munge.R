@@ -48,9 +48,33 @@ library(COVIDutilities)
   # Extract government measures data    
   df_gm <- extract_excel_data(hdx_govmes_url, hdx_govmes_linkid, 2, 'xlsx') %>%
     filter(iso == "NGA") 
-  
-    
 
+    
+# LOAD AND MUNGE DATIM TARGETS --------------------------------------------
+  
+  # Load Nigeria Target information
+  
+  target_files <- list.files(here(data_in), pattern = "HFR_FY20Q1", full.names = TRUE) 
+  df_datim <- map_dfr(.x = target_files,
+    .f = ~readr::read_csv(.x))  
+  
+  df_datim <- 
+    df_datim %>% 
+    group_by(orgunituid, mech_code, fy, indicator) %>% 
+    summarise_at(vars(starts_with("mer")), sum, na.rm = TRUE) %>% 
+    ungroup()    
+  
+  df_datim_tx_curr <- df_datim %>% 
+    filter(indicator == "TX_CURR") %>% 
+    mutate(results_to_targets = case_when(
+      mer_results > 0 & mer_targets == 0 ~ "results but no targets",
+      mer_results > 0 & mer_targets > 0  ~ "results and targets",
+      mer_results == 0 & mer_targets > 0 ~ "no results but targets",
+      mer_results == 0 & mer_targets == 0 ~ "no results, no targets"
+    ))
+
+  df_datim_tx_curr %>% count(results_to_targets)
+  
 # LOAD AND MUNGE HFR FROM NIGERIA -----------------------------------------
 
                           
@@ -100,17 +124,12 @@ library(COVIDutilities)
     
     hfr %>% filter(fix_flag == 1)
     
+    # DUPLICATE SITES PER INDICATOR AND WEEK
     #We need to flag sites that have multiple entries  
     # Summary of the errors in dataset by indicator
     hfr %>% filter(multiple_entry_flag == 2, site_count_period == 2) %>% 
-      count(state, date, indicator) %>% 
+      count(date, indicator) %>%
       spread(date, n)
-    
-      ggplot(aes(y = date, x = indicator, fill = n)) +
-      geom_tile(colour = "white", size = 0.25) + si_style() +
-      facet_wrap(~state, scales = "free") +
-      scale_y_date(date_breaks = "weeks") +
-      scale_fill_viridis_c()
     
    # Summary of the sites with multiple indicator entries by period of reporting and indicator
      hfr %>% filter(multiple_entry_flag == 2, site_count_period == 2) %>% 
@@ -119,9 +138,6 @@ library(COVIDutilities)
        write_csv(., here(data_out, "NGA_dates_with_problems_by_indicator.csv"), na = "")
     
     
-    
-    
-      
     hfr %>% 
         group_by(orgunit, orgunituid, date, indicator) %>% 
         mutate(site_count_period = n()) %>% 
@@ -129,35 +145,38 @@ library(COVIDutilities)
         mutate(multiple_entry_flag = max(site_count_period)) %>% 
         group_by(state, indicator, orgunit, orgunituid, partner, mech_code, date, multiple_entry_flag) %>% 
         summarise(value = sum(value, na.rm = TRUE)) %>% 
-        spread(date, value) %>% 
+        spread(date, value)%>% 
         write_csv(., here(data_out, "NGA_HFR_count_all_wide.csv"))
   
   # Number of sites reporting by week
-  hfr %>% group_by(date, indicator) %>% 
+  hfr %>% 
+    filter(indicator == "TX_CURR") %>%  
+    group_by(date, indicator) %>% 
     summarise(total = sum(value, na.rm = TRUE),
               row_count = n()) %>% 
-    filter(indicator == "TX_CURR") %>% 
     ggplot(aes(date, row_count)) + 
     geom_vline(xintercept = nga_first, size = 2, colour = grey40k, alpha = 0.80) +
-    geom_line() +
+    geom_vline(xintercept = as.Date("2020-03-30"), size = 2, colour = grey40k, alpha = 0.80) +
+    geom_line(colour = grey40k) +
     geom_point(aes(fill = row_count), size = 12, shape = 21, colour = grey80k) +
-    si_style_nolines() + geom_text(aes(label = row_count)) +
+    si_style_xline() + 
+    geom_text(aes(label = row_count)) +
     scale_fill_viridis_c(option = "A", begin = .55, end = 1) +
-    scale_x_date(date_breaks = "2 weeks")  +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y")  +
     theme(legend.position = "none",
           axis.text.y = element_blank()) +
     labs(x = NULL, y = NULL, 
-         title = "The number of sites submitting data spiked on September 30th, 2019 & March 30th, 2020", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
+         title = "Indicator TX_CURR: The number of sites submitting data spiked on September 30th, 2019 & March 30th, 2020", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
          caption = "Source: Nigeria HFR Weekly Data")
     
   ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Site_submission_count", ".png")),
          plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
-         scale = 1.25)
+         scale = 1.35)
 
   
-  
   hfr %>% 
-    count(state, partner, date, mech_code, indicator) %>% spread(date, n) %>% 
+    count(state, partner, date, mech_code, indicator) %>% 
+    spread(date, n) %>% 
     write_csv(., here(data_out, "NGA_HFR_count_all_indic_wide.csv"))
   
 
@@ -227,19 +246,7 @@ library(COVIDutilities)
   
 
 
-# LOAD AND MUNGE DATIM TARGETS --------------------------------------------
 
-  # Load Nigeria Target information
-  
-  target_files <- list.files(here(data_in), pattern = "HFR_FY20Q1", full.names = TRUE) 
-  df_datim <- map_dfr(.x = target_files,
-                      .f = ~readr::read_csv(.x))  
-  
-  df_datim <- 
-    df_datim %>% 
-    group_by(orgunituid, mech_code, fy, indicator) %>% 
-    summarise_at(vars(starts_with("mer")), sum, na.rm = TRUE) %>% 
-    ungroup()
 
 
     # Where is HFR missing mech_code, what facilityUIDs?
