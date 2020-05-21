@@ -1,8 +1,8 @@
 ## PROJECT:  COVID-19 Impact Analytics
 ## AUTHOR:   B.Kagniniwa | USAID
 ## LICENSE:  MIT
-## PURPOSE:  Extract COVID-19 and Other related data from public sources
-## Date:     2020-05-14
+## PURPOSE:  Visualize GovMeasures at local levels
+## Date:     2020-05-19
 
 # LIBRARIES ----------------------------------------------------
 
