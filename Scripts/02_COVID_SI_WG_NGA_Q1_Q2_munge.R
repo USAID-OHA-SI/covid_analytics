@@ -34,6 +34,23 @@ library(COVIDutilities)
   ind_order <- c("HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR",
                  "PrEP_NEW")
   
+  # For calculating lag differences and not getting a ton of Inf values
+  lag_calc <- function(x, y) {
+    ifelse(y > 0.000, (x/y) - 1, NA)
+  }
+  
+  # How large should a value be before it's flagged as an outlier.
+  # must also be 100% greater than the value in the previous period.
+  outlier_thresh = 100
+  
+  
+  #CartoDB colors to pick from
+  scales::show_col(c("#009392", "#72aaa1", "#b1c7b3", "#f1eac8", "#e5b9ad", "#d98994", "#d0587e"))
+  dup_color <- "#e5b9ad"
+  norm_color <- "#b1c7b3"
+  drop_color <- "#f1eac8"
+  
+  
   
 # LOAD AND MUNGE COVID CASES FROM JHU & GOVERNMENT MEASURES  ------------------------------------------------
 
@@ -46,8 +63,8 @@ library(COVIDutilities)
   nga_holiday <- as.Date("2019-12-25")
                         
   # Extract government measures data    
-  df_gm <- extract_excel_data(hdx_govmes_url, hdx_govmes_linkid, 2, 'xlsx') %>%
-    filter(iso == "NGA") 
+  df_gm <- extract_excel_data(hdx_govmes_url, hdx_govmes_linkid, 2, 'xlsx') %>% 
+    filter(iso3 == "NGA")
 
     
 # LOAD AND MUNGE DATIM TARGETS --------------------------------------------
@@ -74,82 +91,189 @@ library(COVIDutilities)
     ))
 
   df_datim_tx_curr %>% count(results_to_targets)
+  df_datim_tx_curr %>% summarise(total = sum(mer_targets, na.rm = TRUE))
+  
+
+# LOAD AND MUNGE DATA FROM 2020-05-22 -------------------------------------
+  hfr_read <- read_excel(here(data_in, "HFR_Performance.xlsx"))
+  names(hfr_read)
+  
+  hfr <- hfr_read %>% 
+    mutate(state = sub('...', "", PSNU),
+      date = as.Date(`HFR WEEK START DATE`, "%m/%d/%y"),
+      `MECHANISM ID` = as.numeric(gsub("(^[[:space:]]*)|([[:space:]]*$)", "", `MECHANISM ID`)),
+      operatingunit = "Nigeria",
+      kp_partner = case_when(
+        `MECHANISM OR PARTNER NAME` == "SFH KP Care 2" ~ 1,
+        `MECHANISM OR PARTNER NAME` == "Heartland Alliance KP Care 1" ~ 1,
+        TRUE ~ 0),
+    ) %>% 
+    rename(orgunit = `FACILITY OR COMMUNITY NAME`,
+      orgunituid = `FACILITY OR COMMUNITY UID`,
+      mech_code = `MECHANISM ID`,
+      partner = `MECHANISM OR PARTNER NAME`,
+      indicator = INDICATOR,
+      sex = SEX,
+      age_coarse = `COARSE AGE`,
+      value = `HFR \r\nRESULT VALUE`) 
+  
+  date_seq <- hfr %>% 
+    arrange(date) %>%  
+    distinct(date) %>% 
+    mutate(period = row_number())
+  
+  hfr_rollup <- 
+    hfr %>% 
+    group_by_at(vars(-value, -sex, -age_coarse)) %>% 
+    summarise(value = sum(value, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    group_by_all() %>% 
+    mutate(rowcount = n()) %>% 
+    ungroup() %>% 
+    arrange(orgunituid, indicator, date) %>% 
+    group_by(orgunituid, indicator) %>% 
+    mutate(pct_change = lag_calc(value, lag(value, order_by = date)), 
+      outlier_flag = ifelse(abs(pct_change) > 1 & value > outlier_thresh, 1, 0),
+    site_flag = if_else(outlier_flag == 1, 1, NA_real_),
+      site_run = n()) %>%
+  fill(site_flag, .direction = "updown") %>% 
+    ungroup() %>% 
+    left_join(., date_seq)
+
+  # List all sites with extreme fluctuations
+  hfr_rollup %>% 
+    filter(site_flag == 1) %>% 
+    group_by_at(vars(date, orgunit, orgunituid,	mech_code, partner,	indicator, state, operatingunit)) %>% 
+    summarise(value = sum(value, na.rm = TRUE)) %>% 
+    spread(date, value) %>% 
+    write_csv(here(data_out, "NGA_outlier_sites.csv"), na = "")
+
+
+
+# VISUALIZE NUMBER OF SITES REPORTING --------------------------------------
+
+  # Number of sites reporting by week
+  hfr_rollup %>% 
+    filter(indicator == "HTS_TST") %>%  
+    group_by(date, indicator) %>% 
+    summarise(total = sum(value, na.rm = TRUE),
+      n_obs = n()) %>% 
+    ggplot(aes(date, n_obs)) + 
+    geom_vline(xintercept = nga_first, size = 3, colour = grey20k, alpha = 0.80) +
+    geom_vline(xintercept = as.Date("2020-03-30"), size = 3, colour = grey20k, alpha = 0.80) +
+    geom_line(colour = grey40k, linetype = "dashed") +
+    geom_point(aes(fill = case_when(
+      n_obs > 500              ~ dup_color,
+      between(n_obs, 440, 500) ~ norm_color,
+      TRUE                    ~ drop_color)
+      ),
+    size = 12, shape = 21, colour = grey80k) + 
+    geom_text(aes(label = n_obs)) +
+    si_style_xline() +
+    scale_fill_identity() +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y")  +
+    theme(legend.position = "none",
+      axis.text.y = element_blank()) +
+    labs(x = NULL, y = NULL, 
+      title = "Indicator HTS_TST: The number of sites submitting data feel sharply at the end of March", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
+      caption = "Source: Nigeria HFR Weekly Data")
+  
+  ggsave(file.path(viz_out, paste0("NGA_HTS_TST_Site_submission_count", ".png")),
+    plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
+    scale = 1.2)
+  
+  
+  
+  
+ 
+  
+  
+  
+  
+      
+  
   
 # LOAD AND MUNGE HFR FROM NIGERIA -----------------------------------------
 
                           
-  # Load NGA HFR data
-  hfr <- 
-    read_excel(here(data_in, "HFR_Weekly_Performance_Data.xlsx")) %>% 
-    #filter(Data %in% ind_order) %>% 
-    arrange(State, Period) %>% 
-    mutate(countryname = "Nigeria",
-           state = sub('...', "", State),
-           date = as.Date(Period, "%m/%d/%y")) %>% 
-    rename(partner = `HFR Partners`,
-           orgunituid = `Facility UID`,
-           mech_code = `Mechanism ID`, 
-           indicator = Data, 
-           value = Value,
-           orgunit = `Organisation unit`) %>% 
-    filter(!is.na(mech_code)) %>% 
-    mutate(mech_code = gsub("(^[[:space:]]*)|([[:space:]]*$)", "", mech_code),
-           indicator = gsub("HFR-", "", indicator)) %>% 
-    arrange(orgunituid, indicator, date)
-    
-   # Fixing duplicates, flagging KP partners and flagging site transitions 
-    hfr <- 
-      hfr %>% 
-      group_by_all() %>% 
-      mutate(rowcount = n()) %>% 
-      distinct_all(.keep_all = FALSE) %>% 
-      ungroup() %>% 
-      dplyr::select(-rowcount) %>% 
-      group_by_at(vars(-value)) %>% 
-      mutate(rowcount2 = n()) %>%
-      summarise(value = max(value, na.rm = TRUE)) %>% 
-      ungroup() %>% 
-      mutate(kp_partner = case_when(
-        partner == "SFH KP Care 2" ~ 1,
-        partner == "Heartland Alliance KP Care 1" ~ 1,
-        TRUE ~ 0
-      )) %>% 
-      group_by(orgunit, orgunituid, date, indicator) %>% 
-      mutate(site_count_period = n()) %>% 
-      group_by(orgunit, orgunituid, indicator) %>% 
-      mutate(multiple_entry_flag = max(site_count_period)) %>% 
-      ungroup() %>% 
-      arrange(orgunituid, orgunit, date, indicator, mech_code) %>% 
-      mutate(fix_flag = if_else(multiple_entry_flag == 2 & site_count_period == 2, 1, 0))
-    
-    hfr %>% filter(fix_flag == 1)
-    
-    # DUPLICATE SITES PER INDICATOR AND WEEK
-    #We need to flag sites that have multiple entries  
-    # Summary of the errors in dataset by indicator
-    hfr %>% filter(multiple_entry_flag == 2, site_count_period == 2) %>% 
-      count(date, indicator) %>%
-      spread(date, n)
-    
-   # Summary of the sites with multiple indicator entries by period of reporting and indicator
-     hfr %>% filter(multiple_entry_flag == 2, site_count_period == 2) %>% 
-      count(state, date, indicator, orgunituid, orgunit) %>% 
-      spread(date, n) %>% 
-       write_csv(., here(data_out, "NGA_dates_with_problems_by_indicator.csv"), na = "")
-    
-    
-    hfr %>% 
-        group_by(orgunit, orgunituid, date, indicator) %>% 
-        mutate(site_count_period = n()) %>% 
-        group_by(orgunit, orgunituid, indicator) %>% 
-        mutate(multiple_entry_flag = max(site_count_period)) %>% 
-        group_by(state, indicator, orgunit, orgunituid, partner, mech_code, date, multiple_entry_flag) %>% 
-        summarise(value = sum(value, na.rm = TRUE)) %>% 
-        spread(date, value)%>% 
-        write_csv(., here(data_out, "NGA_HFR_count_all_wide.csv"))
+  # # Load NGA HFR data
+  # hfr <- 
+  #   read_excel(here(data_in, "HFR_Weekly_Performance_Data.xlsx")) %>% 
+  #   #filter(Data %in% ind_order) %>% 
+  #   arrange(State, Period) %>% 
+  #   mutate(countryname = "Nigeria",
+  #          state = sub('...', "", State),
+  #          date = as.Date(Period, "%m/%d/%y")) %>% 
+  #   rename(partner = `HFR Partners`,
+  #          orgunituid = `Facility UID`,
+  #          mech_code = `Mechanism ID`, 
+  #          indicator = Data, 
+  #          value = Value,
+  #          orgunit = `Organisation unit`) %>% 
+  #   filter(!is.na(mech_code)) %>% 
+  #   mutate(mech_code = as.numeric(gsub("(^[[:space:]]*)|([[:space:]]*$)", "", mech_code)),
+  #          indicator = gsub("HFR-", "", indicator)) %>% 
+  #   arrange(orgunituid, indicator, date)
+  #   
+   # 
+   # 
+   # # Fixing duplicates, flagging KP partners and flagging site transitions 
+   #  hfr <- 
+   #    hfr %>% 
+   #    group_by_all() %>% 
+   #    mutate(rowcount = n()) %>% 
+   #    distinct_all(.keep_all = FALSE) %>% 
+   #    ungroup() %>% 
+   #    dplyr::select(-rowcount) %>% 
+   #    group_by_at(vars(-value)) %>% 
+   #    mutate(rowcount2 = n()) %>%
+   #    summarise(value = max(value, na.rm = TRUE)) %>% 
+   #    ungroup() %>% 
+   #    mutate(kp_partner = case_when(
+   #      partner == "SFH KP Care 2" ~ 1,
+   #      partner == "Heartland Alliance KP Care 1" ~ 1,
+   #      TRUE ~ 0
+   #    )) %>% 
+   #    group_by(orgunit, orgunituid, date, indicator) %>% 
+   #    mutate(site_count_period = n()) %>% 
+   #    group_by(orgunit, orgunituid, indicator) %>% 
+   #    mutate(multiple_entry_flag = max(site_count_period)) %>% 
+   #    ungroup() %>% 
+   #    arrange(orgunituid, orgunit, date, indicator, mech_code) %>% 
+   #    mutate(fix_flag = if_else(multiple_entry_flag == 2 & site_count_period == 2, 1, 0))
+   #  
+   #  hfr %>% filter(fix_flag == 1)
+   #  
+   #  # DUPLICATE SITES PER INDICATOR AND WEEK
+   #  #We need to flag sites that have multiple entries  
+   #  # Summary of the errors in dataset by indicator
+   #  hfr %>% filter(multiple_entry_flag == 2, site_count_period == 2) %>% 
+   #    count(date, indicator) %>%
+   #    spread(date, n)
+   #  
+   # # Summary of the sites with multiple indicator entries by period of reporting and indicator
+   #   hfr %>% filter(multiple_entry_flag == 2, site_count_period == 2) %>% 
+   #    count(state, date, indicator, orgunituid, orgunit) %>% 
+   #    spread(date, n) %>% 
+   #     write_csv(., here(data_out, "NGA_dates_with_problems_by_indicator.csv"), na = "")
+    # 
+    # 
+    # hfr %>% 
+    #     group_by(orgunit, orgunituid, date, indicator) %>% 
+    #     mutate(site_count_period = n()) %>% 
+    #     group_by(orgunit, orgunituid, indicator) %>% 
+    #     mutate(multiple_entry_flag = max(site_count_period)) %>% 
+    #     group_by(state, indicator, orgunit, orgunituid, partner, mech_code, date, multiple_entry_flag) %>% 
+    #     summarise(value = sum(value, na.rm = TRUE)) %>% 
+    #     spread(date, value)%>% 
+    #     write_csv(., here(data_out, "NGA_HFR_count_all_wide.csv"))
   
+
+# VISUALIZE DUPLICATES ----------------------------------------------------
+
   # Number of sites reporting by week
   hfr %>% 
+    #filter(indicator %in% ind_order, indicator != "PrEP_NEW") %>% 
     filter(indicator == "TX_CURR") %>%  
     group_by(date, indicator) %>% 
     summarise(total = sum(value, na.rm = TRUE),
@@ -158,10 +282,15 @@ library(COVIDutilities)
     geom_vline(xintercept = nga_first, size = 2, colour = grey40k, alpha = 0.80) +
     geom_vline(xintercept = as.Date("2020-03-30"), size = 2, colour = grey40k, alpha = 0.80) +
     geom_line(colour = grey40k) +
-    geom_point(aes(fill = row_count), size = 12, shape = 21, colour = grey80k) +
-    si_style_xline() + 
+    geom_point(aes(fill = case_when(
+      row_count > 482           ~ "#e5b9ad", 
+      row_count > 440 & row_count <= 500 ~ "#b1c7b3", 
+      TRUE               ~ "#f1eac8")),  
+      size = 12, shape = 21, colour = grey80k) +
     geom_text(aes(label = row_count)) +
-    scale_fill_viridis_c(option = "A", begin = .55, end = 1) +
+    si_style_xline() + 
+    #facet_wrap(~indicator) +
+    scale_fill_identity() +
     scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y")  +
     theme(legend.position = "none",
           axis.text.y = element_blank()) +
@@ -171,7 +300,7 @@ library(COVIDutilities)
     
   ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Site_submission_count", ".png")),
          plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
-         scale = 1.35)
+         scale = 1.25)
 
   
   hfr %>% 
@@ -188,16 +317,7 @@ library(COVIDutilities)
   # TO2 will start reporting April 1st.
   # FHI360 SIDHAS is transiting sites to CHEMONICS TO3 in other states with reporting starting from April 1st.
   
-  # DECISION: given these site shifts, the analysis at the IP level is likely not useful. Instead, we propose aalyzing site level data and remain ambivalent about who is implementing. We will include partner_shift flags accordingly to track shifts. We also will check for duplicate reporting within a site with a partner shift. There is no need to balance the panel out, instead we will work with an unbalanced panel and those sites with missing data are assumed to be non-reporting.
-  
-  date_seq <- hfr %>% distinct(date) %>% mutate(period = row_number())
-  
-  
-  
-  
-  
-  
-  
+  # DECISION: given these site shifts, the analysis at the IP level is likely not useful. Instead, we propose aalyzing site level data and remain ambivalent about who is implementing. We will include partner_shift flags accordingly to track shifts. We also will check for duplicate reporting within a site with a partner shift. There is no need to balance the panel out, instead we will work with an unbalanced panel and those sites with missing data are assumed to be non-reporting
   
   
   # Expand the dates for each facility so we can look at long term patterns of submission
@@ -208,41 +328,41 @@ library(COVIDutilities)
   
 
   
-  hfr_balanced <- 
-    hfr %>% 
-    group_by_at(vars(-value)) %>% 
-    summarise(value = sum(value, na.rm = TRUE)) %>% 
-    group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
-    mutate(submissions = n()) %>% 
-    ungroup() %>% 
-    complete(date, nesting(orgunituid, mech_code, State, orgunit,
-                           partner, indicator, countryname, state), fill = list(value = NA_real_)) %>% 
-    group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
-    mutate(submit_flag = if_else(!is.na(value), 1, 0)) %>% 
-    ungroup() %>% 
-    arrange(mech_code, orgunituid, indicator, date) %>% 
-    mutate(mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(),
-           mech_code = as.numeric(mech_code)) %>% 
-    group_by(orgunituid, indicator, mech_code, orgunit, partner, ) %>% 
-    mutate(missing_count = sum(is.na(value))) %>% 
-    ungroup() %>% 
-    mutate(no_reporting = if_else(missing_count == 32, 1, 0)) %>% 
-    left_join(., date_seq) %>% 
-    group_by_at(vars(orgunituid, mech_code, partner, indicator, state, orgunit)) %>% 
-    mutate(total = sum(value, na.rm = TRUE)) %>% 
-    ungroup() %>% 
-    mutate(all_zeros = if_else(total == 0, 1, 0))
-  
+  # hfr_balanced <- 
+  #   hfr %>% 
+  #   group_by_at(vars(-value)) %>% 
+  #   summarise(value = sum(value, na.rm = TRUE)) %>% 
+  #   group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
+  #   mutate(submissions = n()) %>% 
+  #   ungroup() %>% 
+  #   complete(date, nesting(orgunituid, mech_code, State, orgunit,
+  #                          partner, indicator, countryname, state), fill = list(value = NA_real_)) %>% 
+  #   group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
+  #   mutate(submit_flag = if_else(!is.na(value), 1, 0)) %>% 
+  #   ungroup() %>% 
+  #   arrange(mech_code, orgunituid, indicator, date) %>% 
+  #   mutate(mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(),
+  #          mech_code = as.numeric(mech_code)) %>% 
+  #   group_by(orgunituid, indicator, mech_code, orgunit, partner, ) %>% 
+  #   mutate(missing_count = sum(is.na(value))) %>% 
+  #   ungroup() %>% 
+  #   mutate(no_reporting = if_else(missing_count == 32, 1, 0)) %>% 
+  #   left_join(., date_seq) %>% 
+  #   group_by_at(vars(orgunituid, mech_code, partner, indicator, state, orgunit)) %>% 
+  #   mutate(total = sum(value, na.rm = TRUE)) %>% 
+  #   ungroup() %>% 
+  #   mutate(all_zeros = if_else(total == 0, 1, 0))
+  # 
   # Determine where NAs stop and where the mechanism started reporting, this is true reporting completeness point
   
     
-  # Review for completeness
-  missing_mechs <-hfr %>% filter(is.na(mech_code)) %>% count(orgunit, orgunituid) %>% select(-n)
-  unique(hfr$state)
-  unique(hfr$indicator)
-  
-  # Check that it's fixed (gsub checks beginning and end)
-  utf8::utf8_print(unique(hfr$indicator), utf8 = FALSE)
+  # # Review for completeness
+  # missing_mechs <-hfr %>% filter(is.na(mech_code)) %>% count(orgunit, orgunituid) %>% select(-n)
+  # unique(hfr$state)
+  # unique(hfr$indicator)
+  # 
+  # # Check that it's fixed (gsub checks beginning and end)
+  # utf8::utf8_print(unique(hfr$indicator), utf8 = FALSE)
   
 
 
