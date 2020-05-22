@@ -14,9 +14,14 @@ library(sf)
 library(glitr)        # SI Plotting
 library(RColorBrewer) # Colors Schemes
 library(lubridate)    # Date parser
-library(gridExtra)
+#library(ggtree)
+#library(treeio)
 library(patchwork)
 library(ggthemes)
+
+# Required Modules
+
+source('./Scripts/01_Extract_Geodata.R')
 
 # GLOBAL -------------------------------------------------------------
 
@@ -108,20 +113,35 @@ file_govm <- "nga_acaps_gov_measures_data.csv"
     mutate(admin_name = if_else(admin_name == 'Federal Capital Territory', 'FCT', admin_name)) %>%
     mutate(admin_name = gsub(" State", "", admin_name))
   
-  nga_govm %>% 
-    glimpse() 
+  #nga_govm %>% View()
   
   ## Federal Measures
-  nga_govm %>% 
+  nga_govm_c <- nga_govm %>% 
     filter(admin_name == 'Country') %>% 
     distinct(category, measure) %>% 
     arrange(category, measure)
+  
+  # nga_govm_c %>% 
+  #   mutate(pathString = paste("Gov. Measures", category, measure, sep = "/")) %>% 
+  #   as.data.frame.tree() %>% 
+  #   get.tree()%>% 
+  #   ggtree()
   
   ## States Measures
   nga_govm %>% 
     filter(admin_name != 'Country') %>% 
     distinct(category, measure) %>% 
     arrange(category, measure) 
+  
+  # nga_govm %>% 
+  #   filter(admin_name != 'Country') %>% 
+  #   group_by(category, measure) %>% 
+  #   summarise(states = n_distinct(admin_name)) %>% 
+  #   ungroup() %>% 
+  #   mutate(pathString = paste("Local Gov. Measures", category, measure, sep = "/")) %>% 
+  #   as.Node() %>% 
+  #   print("states")
+    
   
   ## Generate maps for all state level measure categories
   nga_govm %>% 

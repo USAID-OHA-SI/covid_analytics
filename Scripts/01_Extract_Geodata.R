@@ -17,8 +17,6 @@ library(here)
 
 # GLOBAL --------------------------------------------------------
 
-#folder_setup()
-
 dir_data <- "Data"
 dir_gis <- "GIS"
 
@@ -61,32 +59,16 @@ dir_gis <- "GIS"
   nga0 <- get_geodata("NGA", 0) %>% 
     st_geometry()
 
-  nga0 <- get_geodata("NGA", 0) %>% 
-    st_geometry()
-
-  nga1 <- get_geodata("NGA", 1)
-
-  nga1 %>% 
-    st_set_geometry(NULL) %>% 
-    glimpse()
-
-  nga1 <- nga1 %>% 
+  nga1 <- get_geodata("NGA", 1) %>% 
     dplyr::select(hasc = hasc_1, name = name_1) %>% 
     dplyr::mutate(hasc = substr(hasc, 4,5))
-  
-
-  nga1 %>% 
-    st_geometry() %>% 
-    ggplot() +
-    geom_sf(fill=NA)+
-    bwTheme()
 
   nga1 %>% 
     ggplot(aes(fill=name, label=hasc)) +
     geom_sf(show.legend = F, color = 'white', lwd =.5) +
-    #scale_fill_brewer(palette = "Spectral") +
+    scale_fill_discrete() +
     geom_sf_text(size = 2) +
-    labs(title = 'Nigeria - COVID-19 Impact', x=NULL, y=NULL, caption = 'Source: GADM, NCDC, JHU') +
+    labs(x="", y="") +
     si_style() +
     theme(
       axis.text.x = element_blank(), 
