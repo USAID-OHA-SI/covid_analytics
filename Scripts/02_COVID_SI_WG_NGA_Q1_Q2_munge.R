@@ -138,8 +138,13 @@ library(COVIDutilities)
       site_run = n()) %>%
   fill(site_flag, .direction = "updown") %>% 
     ungroup() %>% 
-    left_join(., date_seq)
-
+    left_join(., date_seq) %>% 
+    mutate(mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(), 
+      mech_code = as.numeric(mech_code)) %>% 
+    group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
+    mutate(missing_count = sum(is.na(value))) %>% 
+    ungroup() 
+  
   # List all sites with extreme fluctuations
   hfr_rollup %>% 
     filter(site_flag == 1) %>% 
@@ -183,11 +188,69 @@ library(COVIDutilities)
     scale = 1.2)
   
   
+
+# HEATMAPS OF MECHS -------------------------------------------------------
+
+  # Heatmap to familiarize with each mechanism
+  heat_plot <- function(mech_indicator) {
+    ip <- hfr_rollup %>% filter(mech_indicator == {{mech_indicator}}) %>% 
+      count(partner) %>% select(-n) %>% pull() 
+    
+    hfr_rollup %>% 
+      filter(mech_indicator == {{mech_indicator}}) %>% 
+      mutate(site_order = fct_reorder(orgunituid, missing_count)) %>% 
+      ggplot(aes(x = date, y = site_order, fill = log(value+1))) +
+      geom_tile(colour = "white", size = 0.25) +
+      geom_vline(xintercept = nga_first, size = 1, colour = "#b2182b")+
+      scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y",
+        limits = as.Date(c("2019-09-30", "2020-05-15"))) +
+      scale_fill_viridis_c(alpha = 0.75, na.value = grey50k, direction = -1, option = "B") +
+      si_style_xline() +
+      labs(title = paste0(ip, " ", {{mech_indicator}}),
+        y = NULL, x = NULL) +
+      theme(legend.position = "none")
+    
+    ggsave(file.path(viz_out, paste0(ip, "_", {{mech_indicator}}, "_hfr", ".png")),
+      plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
+      scale = 2)
+    
+    return(last_plot())
+  }
   
+  
+  heat_plot(mech_indicator = "18655_TX_CURR")
+  unique(hfr_rollup %>% filter(indicator %in% c("TX_CURR")) %>% select(mech_indicator)) %>% 
+    pull() %>% 
+    walk(heat_plot)  
   
  
+  # What does this look like across states?
+  state_plot <- function(state) {
+    
+    hfr_rollup %>% 
+      filter(state == {{state}} & indicator == "TX_CURR") %>%
+      count(orgunituid, partner, state, orgunit) %>% prinf()
+    
+    hfr_rollup %>% 
+      filter(state == {{state}} & indicator == "TX_CURR") %>%
+      mutate(site_order = fct_reorder(orgunituid, missing_count)) %>% 
+      ggplot(aes(x = date, y = site_order, fill = log(value+1))) +
+      geom_tile(colour = "white", size = 0.25) +
+      facet_wrap(~partner) +
+      geom_vline(xintercept = nga_first, size = 1, colour = "#b2182b")+
+      scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y",
+        limits = as.Date(c("2019-09-30", "2020-05-15"))) +
+      scale_fill_viridis_c(alpha = 0.25, na.value = grey50k, direction = -1, option = "B") +
+      si_style_xline() 
+    
+    ggsave(file.path(viz_out, paste0({{state}}, "_hfr", ".png")),
+      plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
+      scale = 2)
+  }
   
-  
+  # No TX_CURR in Anambra
+  unique(hfr_rollup$state[hfr_rollup$state != "Anambra state"]) %>% 
+    walk(state_plot)
   
   
       
@@ -343,7 +406,7 @@ library(COVIDutilities)
   #   arrange(mech_code, orgunituid, indicator, date) %>% 
   #   mutate(mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(),
   #          mech_code = as.numeric(mech_code)) %>% 
-  #   group_by(orgunituid, indicator, mech_code, orgunit, partner, ) %>% 
+  #   group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
   #   mutate(missing_count = sum(is.na(value))) %>% 
   #   ungroup() %>% 
   #   mutate(no_reporting = if_else(missing_count == 32, 1, 0)) %>% 
@@ -366,18 +429,7 @@ library(COVIDutilities)
   
 
 
-
-
-
-    # Where is HFR missing mech_code, what facilityUIDs?
-  tmp <- hfr %>% filter(indicator %in% c("TX_CURR", "TX_NEW")) %>%  left_join(., df_datim)
-  
-
 # PLOT and EDA ------------------------------------------------------------
-
-  # TODO: Figure out when a mechanism "starts" and "ends" if this is the case
-  # 
-  
   
   # Group by 9 IPs (mech_id) acrosss 17 states - but it looks like many mechnanisms had transitions
   # Look at IPs across states by indicator
@@ -388,94 +440,12 @@ library(COVIDutilities)
   # Dot plot showing completeness metric for all sites in a mech
   
   
-  # Heatmap to familiarize with each mechanism
-  heat_plot <- function(mech_indicator) {
-    ip <- hfr_balanced %>% filter(mech_indicator == {{mech_indicator}}) %>% 
-      count(partner) %>% select(-n) %>% pull() 
-    
-    hfr_balanced %>% 
-      filter(mech_indicator == {{mech_indicator}}) %>% 
-      mutate(site_order = fct_reorder(orgunituid, missing_count)) %>% 
-      ggplot(aes(x = date, y = site_order, fill = log(value+1))) +
-      geom_tile(colour = "white", size = 0.25) +
-      geom_vline(xintercept = nga_first, size = 1, colour = "#b2182b")+
-      scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y",
-                   limits = as.Date(c("2019-09-30", "2020-05-15"))) +
-      scale_fill_viridis_c(alpha = 0.25, na.value = grey50k, direction = -1, option = "B") +
-      si_style_xline() +
-      labs(title = paste0(ip, " ", {{mech_indicator}}),
-           y = NULL, x = NULL) +
-      theme(legend.position = "none")
-    
-    ggsave(file.path(viz_out, paste0(ip, "_", {{mech_indicator}}, "_hfr", ".png")),
-            plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
-           scale = 2)
-    
-    return(last_plot())
-  }
-  
-  
-  heat_plot(mech_indicator = "18655_TX_CURR")
-  unique(hfr_balanced %>% filter(indicator %in% c("TX_CURR")) %>% select(mech_indicator)) %>% 
-    pull() %>% 
-    walk(heat_plot)
-  
-  
-
-  # What does this look like across states?
-  state_plot <- function(state) {
-  
-    hfr_balanced %>% 
-    filter(state == {{state}} & indicator == "TX_CURR") %>%
-    count(orgunituid, partner, state, orgunit) %>% prinf()
-      
-    hfr_balanced %>% 
-    filter(state == {{state}} & indicator == "TX_CURR") %>%
-    mutate(site_order = fct_reorder(orgunituid, missing_count)) %>% 
-    ggplot(aes(x = date, y = site_order, fill = log(value+1))) +
-    geom_tile(colour = "white", size = 0.25) +
-      facet_wrap(~partner) +
-    geom_vline(xintercept = nga_first, size = 1, colour = "#b2182b")+
-    scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y",
-                 limits = as.Date(c("2019-09-30", "2020-05-15"))) +
-    scale_fill_viridis_c(alpha = 0.25, na.value = grey50k, direction = -1, option = "B") +
-    si_style_xline() 
-    
-    ggsave(file.path(viz_out, paste0({{state}}, "_hfr", ".png")),
-           plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
-           scale = 2)
-  }
-    
-  # No TX_CURR in Anambra
-  unique(hfr_balanced$state[hfr_balanced$state != "Anambra state"]) %>% 
-    walk(state_plot)
-  
-  
-  hfr_balanced %>% 
-    filter(state == "Anambra State" & indicator == "TX_CURR") %>%
-    count(orgunituid, partner, state, orgunit) %>% prinf()
-  
-  
-  hfr %>% 
-    filter(state ==  & indicator == "TX_CURR") %>%
-    mutate(site_order = fct_reorder(orgunituid, missing_count)) %>% 
-    
-  
-  
-  
-
-  
-  
  
- df_indic %>% 
-   filter(indicator %in% ind_order) %>% 
-   group_by(indicator, partner) %>% 
-   summarise(val = sum(results, na.rm = TRUE)) %>% 
-   spread(period, val) %>% 
-   ungroup() %>% 
-   mutate(change = Q2 - Q1, 
-          direction = if_else(change > 0, "up", "down"))
   
+  
+
+
+
   
   
  

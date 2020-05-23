@@ -30,16 +30,14 @@ scales::show_col(c("#009392", "#72aaa1", "#b1c7b3", "#f1eac8", "#e5b9ad", "#d989
 
   #BIG PICTURE FIRST - trends across time
   hfr_rollup%>% 
-    filter(indicator %in% ind_order, indicator != "PrEP_NEW") %>% 
+    filter(indicator %in% ind_order, indicator != "PrEP_NEW")%>% 
     group_by(indicator, date) %>% 
     summarise(value = sum(value, na.rm = TRUE),
       n = n())%>% 
   group_by(indicator) %>% 
   mutate(y = (mean(value, na.rm = TRUE) *.10),
     pct_change = lag_calc(value, lag(value, order_by = date)),
-    max_change = min(pct_change, na.rm = TRUE)) %>% prinf()
- 
- %>% 
+    max_change = min(pct_change, na.rm = TRUE)) %>% 
   ungroup() %>% 
     ggplot(aes(x = date, y = value)) +
     #geom_vline(xintercept = df_who$date, size = 2, color = grey10k) +
@@ -74,9 +72,8 @@ ggsave(file.path(viz_out, paste0("NGA_WHY_IT_MATTERS_Plot", ".png")),
 
 # -------------------------------------------------------------------------------
 # Focusing just on TX_CURR for presentation
-hfr%>% 
+hfr_rollup %>% 
     filter(indicator =="TX_CURR") %>% 
-    filter(fix_flag != 1) %>% 
     group_by(indicator, date) %>% 
     summarise(value = sum(value, na.rm = TRUE),
       n = n()) %>% 
@@ -118,16 +115,55 @@ hfr%>%
       strip.text = element_text(face = "bold"),
       panel.spacing = unit(2, "lines"))
 
-ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Plot", ".png")),
-  plot = last_plot(), dpi = 320, width = 9.5, height = 3.75, device = "png",
-  scale = 1)
+  ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Plot", ".png")),
+    plot = last_plot(), dpi = 320, width = 9.5, height = 3.75, device = "png",
+    scale = 1)
 
 
 # VIZ BY STATES - LARGEST DROP IN PARTNERS REPORTING ----------------------
-hfr%>% 
-  filter(indicator =="TX_CURR") %>% 
-  group_by(indicator, date, state) %>% 
-  summarise(n = n()) %>% 
-  ggplot(aes(x = date, y = n, fill = n)) +
-    geom_step() + facet_wrap(~state)
+
+  # Set the total number of sites to appear 1 week after max date
+  max_sites <- hfr_rollup %>% filter(indicator == "TX_CURR") %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, state) %>% 
+    summarise(max = max(n, na.rm = TRUE),
+      date = max(date, na.rm = TRUE) + 8) 
+
+
+# By State
+  hfr_rollup %>% 
+    filter(indicator =="TX_CURR") %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, state) %>% 
+    mutate(max = max(n, na.rm = TRUE), 
+      max_date = max(date)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(state, indicator) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    ungroup() %>% 
+    mutate(state_pct = fct_reorder(state_pct, max, .desc = TRUE)) %>% 
+    ggplot(aes(x = date, y = n)) + geom_col(aes(y = max), fill = grey10k, alpha = 0.75) +
+    geom_vline(xintercept = as.Date("2020-03-30"), linetype = "dashed", colour = grey50k) +
+      geom_col(aes(fill = if_else(.data$state %in% c("Kano State", "Jigawa State"), "#b1c7b3", "#d8e3d8"))) + 
+    geom_errorbar(aes(x=date, ymin=n, ymax=n), size=0.5, width=5, colour = grey50k) +
+   scale_fill_identity() +
+    # geom_smooth(se = FALSE, span = 0.5,, size = 1.5, colour = grey50k) + 
+    facet_wrap(~state_pct, scales = "free_y", ncol = 4)+
+      #labeller = label_wrap_gen(width = 20, multi_line = TRUE)) +
+  si_style_xline() + theme(axis.text.y = element_blank())  +
+    labs(x = NULL, y = NULL, 
+      title = "TX_CURR: SITE REPORTING RATES HAVE DECLINED THE MOST IN KANO STATE AND JIGAWA STATE SINCE LOCKDOWN",
+      subtitle = "State level site reporting rates by period, ordered from largest site count to smallest \n",
+      caption = "Nigeria HFR Weekly Data")
+    
+  
+  ggsave(file.path(viz_out, paste0("NGA_site_completion_rates", ".png")),
+    plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
+    scale = 1.25)
+  
+
 
