@@ -14,38 +14,64 @@ library(sf)
 library(glitr)        # SI Plotting
 library(RColorBrewer) # Colors Schemes
 library(lubridate)    # Date parser
-library(gridExtra)
+library(janitor)
+library(here)
 library(patchwork)
 library(ggthemes)
+library(ggpattern)
+
+# REQUIRED
+
+  ## Run to update covid and gov measures data
+  source('./Scripts/01_Extract_Geodata.R')
 
 # GLOBAL -------------------------------------------------------------
 
-dir_data <- "Data"
-dir_gis <- "GIS"
-dir_graphics <- "Graphics"
-dir_images <- "Images"
-
-ncdc <- "https://covid19.ncdc.gov.ng/"
-tbl <- "table#custom1"
+  dir_data <- "Data"
+  dir_dataout <- "Dataout"
+  dir_gis <- "GIS"
+  dir_graphics <- "Graphics"
+  dir_images <- "Images"
+  
+  ncdc <- "https://covid19.ncdc.gov.ng/"
+  tbl <- "table#custom1"
 
 # FUNCTIONS ----------------------------------------------------------
   
   # Maps
-  geo_plot <- function(dataset, 
+  geo_plot <- function(dataset,
                        viz_attr, 
-                       viz_title, 
-                       viz_save = FALSE, ...) {
+                       viz_title,
+                       viz_subtitle = "",
+                       overlay = NULL,
+                       viz_save = FALSE) {
     
     viz <- dataset %>% 
-      ggplot(aes_string(fill = viz_attr)) +
-      geom_sf(color=gray(.8), lwd=.5) +
+      ggplot() +
+      geom_sf(
+        aes_string(fill = viz_attr), 
+        color=gray(.8), 
+        lwd=.5)
+    
+    if (!is.null(overlay)) {
+      viz <- viz +
+        geom_sf(
+          data = overlay, 
+          size = 1.5, 
+          color = gray(.5)) 
+    }
+    
+    viz <- viz +
       scale_fill_gradient2(low='yellow',  
                            high='brown', 
                            na.value = 'white') +
-      geom_sf_text(aes(label=state), size = 3) +
+      geom_sf_text(
+        aes(label=state), 
+        size = 3) +
       coord_sf() +
       labs(
         title = viz_title,
+        subtitle = viz_subtitle,
         caption = paste0('OHA/SIEI/SI, Source: NCDC as of ', Sys.Date())
       ) +
       si_style() +
@@ -64,7 +90,7 @@ tbl <- "table#custom1"
     print(viz)
     
     if (viz_save == TRUE) {
-      ggsave(filename = paste0(dir_images, "/", viz_title, ".png"),
+      ggsave(filename = paste0(dir_graphics, "/", viz_title, ".png"),
              width = 11, height = 8)
     }
     
@@ -72,7 +98,10 @@ tbl <- "table#custom1"
   }
   
   # Bar charts => NOT WORKING!
-  bar_chart <- function(dataset, viz_attr) {
+  bar_chart <- function(dataset, 
+                        viz_attr) {
+    
+    viz_attr <- as.name(viz_attr)
     
     viz <- dataset %>% 
       dplyr::filter(!is.na(!!viz_attr) & !!viz_attr != 0) %>% 
@@ -86,6 +115,8 @@ tbl <- "table#custom1"
         axis.title = element_blank()
       )
     
+    print(viz)
+    
     return(viz)
   }
 
@@ -94,51 +125,67 @@ tbl <- "table#custom1"
   ## Admin boundaries
   
   nga_adm0 <- get_geodata("NGA", 0) %>% 
-    st_set_geometry(NULL)
+    st_geometry() %>% 
+    st_transform(crs = st_crs(3857))
   
   nga_adm1 <- get_geodata("NGA", 1) %>% 
-    dplyr::select(state = name_1)
+    st_transform(crs = st_crs(3857)) %>% 
+    dplyr::select(state = name_1) %>% 
+    mutate(state = ifelse(state == 'Federal Capital Territory', 'FCT', state))
   
   nga_adm2 <- get_geodata("NGA", 2) %>% 
-    dplyr::select(state = name_1, lga = name_2)
+    st_transform(crs = st_crs(3857)) %>%
+    dplyr::select(state = name_1, lga = name_2) %>% 
+    mutate(state = ifelse(state == 'Federal Capital Territory', 'FCT', state))
+  
+  ## Gov. Measure Data
+  
+  nga_govm <- read_csv(paste0(dir_dataout, "/nga_acaps_gov_measures_data_", Sys.Date(), ".csv")) %>% 
+    filter(admin_name != 'Country') %>% 
+    mutate(admin_name = ifelse(admin_name == 'Federal Capital Territory', 'FCT', admin_name)) %>% 
+    mutate(admin_name = gsub(" State", "", admin_name)) 
+  
+  nga_govm_c <- nga_govm %>% 
+    distinct(admin_name, category)
   
   nga_adm1 %>% 
-    st_set_geometry(NULL) %>% 
-    pull(state)
+    filter(!state %in% (nga_govm_c %>% pull(admin_name)))
+    
+  nga_govm_geo <- nga_adm1 %>% 
+    dplyr::left_join(nga_govm_c, by=c('state' = 'admin_name')) 
+  
+  nga_govm_geo_lockd <- nga_govm_geo %>% 
+    filter(category == 'Lockdown') %>% 
+    group_by(category) %>% 
+    summarise() %>%
+    st_make_grid(what = "corners", cellsize = 40000)
+  
+  nga_govm_geo_movr <- nga_govm_geo %>% 
+    filter(category == 'Movement restrictions') %>% 
+    group_by(category) %>% 
+    summarise() %>%
+    st_make_grid(what = "corners", cellsize = 30000)
+  
+  nga_govm_geo_pubh <- nga_govm_geo %>% 
+    filter(category == 'Public health measures') %>% 
+    group_by(category) %>% 
+    summarise() %>%
+    st_make_grid(what = "corners", cellsize = 10000) 
+  
+  nga_govm_geo_socd <- nga_govm_geo %>% 
+    filter(category == 'Social distancing') %>% 
+    group_by(category) %>% 
+    summarise() %>%
+    st_make_grid(what = "corners", cellsize = 10000) 
   
   ## Covid-19 Stats
   
-  nga_covid <- extract_tbl_data(src_url = ncdc, tbl_id = tbl)
+  nga_covid <- read_csv(paste0(dir_dataout, "/nga_ncdc_covid_data_", Sys.Date(), ".csv"))
   
-  nga_covid <- nga_covid %>% 
-    rename_at(vars(everything()), funs(str_replace_all(., "__", "_"))) %>% 
-    mutate(
-      no_of_cases_lab_confirmed = as.integer(str_replace(no_of_cases_lab_confirmed, ",","")),
-      no_of_cases_on_admission = as.integer(str_replace(no_of_cases_on_admission, ",",""))
-    )
-  
-  nga_covid %>% 
-    glimpse()
-  
-  nga_covid %>% 
-    distinct(states_affected) %>% 
-    pull()
-  
-  View(nga_covid)
-  
-  ## Join Covid-19 Stats to States' boundaries
-  
-  nga_geo <- nga_adm1 %>% 
-    dplyr::mutate(state = if_else(state == 'Federal Capital Territory', 'FCT', state)) %>% 
+  nga_covid_geo <- nga_adm1 %>% 
     dplyr::left_join(nga_covid, by=c('state' = 'states_affected')) 
   
-  nga_geo %>% 
-    glimpse() 
-  
-  nga_geo %>% 
-    st_set_geometry(NULL) %>% 
-    View()
-  
+
 # VIZ ------------------------------------------------------------------
   
   # Country context Map
@@ -148,8 +195,7 @@ tbl <- "table#custom1"
     geom_sf(fill=NA, color=gray(.5), lwd=.5) +
     coord_sf() +
     geom_sf_text(aes(label=state), size = 2) +
-    labs(title = "NIGERIA") +
-    coord_sf() +
+    labs(title = "NIGERIA - Admistrative Sub-divisions") +
     si_style() +
     theme(
       title = element_text(margin = unit(c(1,1,5,1),'pt')),
@@ -163,91 +209,43 @@ tbl <- "table#custom1"
       panel.background = element_rect(fill=NULL, colour = gray(.6), size = .5)
     )
   
-  ## Generate COVID Maps
   
-  nga_map_deaths <- geo_plot(nga_geo, 'no_of_deaths', 'NIGERIA - COVID-19 Related Deaths', viz_save = T)
-  nga_map_confirmed <- geo_plot(nga_geo, 'no_of_cases_lab_confirmed', 'NIGERIA - COVID-19 Confirmed Cases', viz_save = T)
-  nga_map_admisions <- geo_plot(nga_geo, 'no_of_cases_on_admission', 'NIGERIA - COVID-19 Cases on Admission', viz_save = T)
-  nga_map_discharged <- geo_plot(nga_geo, 'no_discharged', 'NIGERIA - COVID-19 Discharged Cases', viz_save = T)
+  ## Get all relevant columns
+  covid_map_cols <- nga_covid_geo %>% 
+    st_set_geometry(NULL) %>% 
+    dplyr::select(-state) %>% 
+    names() 
+  
+  covid_map_titles <- c(
+    "Confirmed Cases", 
+    "Cases on Admission", 
+    "Discharged Cases", 
+    "Related Deaths"
+  ) %>% 
+    setNames(covid_map_cols)
 
-  ## Generate bar charts of COVID Stats
   
-  nga_deaths <- nga_geo %>% 
-    dplyr::filter(!is.na(no_of_deaths) & no_of_deaths != 0) %>% 
-    ggplot(aes(reorder(state, no_of_deaths), no_of_deaths, fill=no_of_deaths)) +
-    geom_col(color = gray(.8), lwd=.1, show.legend = F) +
-    scale_fill_gradient2(low='yellow',  high='brown') +
-    coord_flip() +
-    si_style_nolines() +
-    theme(
-      axis.text.x = element_blank(),
-      axis.title = element_blank()
-    )
+  ## Combine maps + plots and save
   
-  nga_confirmed <- nga_geo %>% 
-    dplyr::filter(!is.na(no_of_cases_lab_confirmed) & no_of_cases_lab_confirmed != 0) %>% 
-    ggplot(aes(reorder(state, no_of_cases_lab_confirmed), no_of_cases_lab_confirmed, fill=no_of_cases_lab_confirmed)) +
-    geom_col(color = gray(.8), lwd=.1, show.legend = F) +
-    scale_fill_gradient2(low='yellow',  high='brown') +
-    coord_flip() +
-    si_style_nolines() +
-    theme(
-      axis.text.x = element_blank(),
-      axis.title = element_blank()
-    )
-  
-  nga_admisions <- nga_geo %>% 
-    dplyr::filter(!is.na(no_of_cases_on_admission) & no_of_cases_on_admission != 0) %>% 
-    ggplot(aes(reorder(state, no_of_cases_on_admission), no_of_cases_on_admission, fill=no_of_cases_on_admission)) +
-    geom_col(color = gray(.8), lwd=.1, show.legend = F) +
-    scale_fill_gradient2(low='yellow',  high='brown') +
-    coord_flip() +
-    si_style_nolines() +
-    theme(
-      axis.text.x = element_blank(),
-      axis.title = element_blank()
-    )
-  
-  nga_discharged <- nga_geo %>% 
-    dplyr::filter(!is.na(no_discharged) & no_discharged != 0) %>% 
-    ggplot(aes(reorder(state, no_discharged), no_discharged, fill=no_discharged)) +
-    geom_col(color = gray(.8), lwd=.1, show.legend = F) +
-    scale_fill_gradient2(low='yellow',  high='brown') +
-    coord_flip() +
-    si_style_nolines() +
-    theme(
-      axis.text.x = element_blank(),
-      axis.title = element_blank()
-    )
-  
-  ## Arrange plots and save
-  
-  ## Deaths
-  nga_map_deaths + nga_deaths +
-    plot_layout(widths = c(2,1))
-  
-  ggsave(filename = paste0(dir_graphics, "/NIGERIA - COVID-19 Related Deaths by states.png"),
-         width = 11, height = 7)
-  
-  ## Confirmed
-  nga_map_confirmed + nga_confirmed +
-    plot_layout(widths = c(2,1))
-  
-  ggsave(filename = paste0(dir_graphics, "/NIGERIA - COVID-19 Confirmed Cases by states.png"),
-         width = 11, height = 7)
-  
-  
-  ## Admissions
-  nga_map_admisions + nga_admisions +
-    plot_layout(widths = c(2,1))
-  
-  ggsave(filename = paste0(dir_graphics, "/NIGERIA - COVID-19 Cases on Admissions by states.png"),
-         width = 11, height = 7)
-  
-  ## Discharged
-  nga_map_discharged + nga_discharged +
-    plot_layout(widths = c(2,1))
-  
-  ggsave(filename = paste0(dir_graphics, "/NIGERIA - COVID-19 Discharged Cases by states.png"),
-         width = 11, height = 7)
+  names(covid_map_titles) %>% 
+    map(function(map_col) {
+      
+      map_title <- paste0('NIGERIA - COVID-19 ', covid_map_titles[[map_col]])
+      map_subtitle <- "Grey dots indicate state has local lockdown measures"
+      
+      map <- geo_plot(nga_covid_geo, 
+                      map_col, 
+                      map_title, 
+                      viz_subtitle = map_subtitle,
+                      overlay = nga_govm_geo_lockd, 
+                      viz_save = T)
+      
+      bar <- bar_chart(nga_covid_geo, map_col)
+      
+      map + bar +
+        plot_layout(widths = c(2,1))
+      
+      ggsave(filename = here(dir_graphics, paste0(map_title, " by states.png")),
+             width = 11, height = 7)
+    })
   

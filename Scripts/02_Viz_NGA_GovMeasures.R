@@ -21,17 +21,17 @@ library(ggthemes)
 
 # Required Modules
 
-source('./Scripts/01_Extract_Geodata.R')
+  source('./Scripts/01_Extract_Geodata.R')
 
 # GLOBAL -------------------------------------------------------------
 
-dir_data <- "Data"
-dir_dataout <- "Dataout"
-dir_gis <- "GIS"
-dir_graphics <- "Graphics"
-dir_images <- "Images"
-
-file_govm <- "nga_acaps_gov_measures_data.csv"
+  dir_data <- "Data"
+  dir_dataout <- "Dataout"
+  dir_gis <- "GIS"
+  dir_graphics <- "Graphics"
+  dir_images <- "Images"
+  
+  file_govm <- paste0("nga_acaps_gov_measures_data_", Sys.Date(), ".csv")
 
 # FUNCTIONS ----------------------------------------------------------
   

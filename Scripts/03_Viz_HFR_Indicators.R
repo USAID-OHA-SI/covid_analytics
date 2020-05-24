@@ -3,6 +3,7 @@
 ## LICENSE:  MIT
 ## PURPOSE:  Extract COVID-19 and Other related data from public sources
 ## Date:     2020-05-19
+## Updated:  2020-05-22
 
 # LIBRARIES ----------------------------------------------------
 
@@ -18,6 +19,7 @@ library(RColorBrewer) # Colors Schemes
 library(lubridate)    # Date parser
 library(ggthemes)
 library(patchwork)
+
 
 
 # GLOBAL -------------------------------------------------------------

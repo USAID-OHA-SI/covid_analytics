@@ -33,7 +33,7 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
   nga_covid <- extract_tbl_data(src_url = ncdc, tbl_id = tbl) 
 
   nga_covid <- nga_covid %>% 
-    rename_at(vars(everything()), funs(str_replace_all(., "__", "_"))) %>% 
+    janitor::clean_names() %>% 
     mutate(
       no_of_cases_lab_confirmed = as.integer(str_replace(no_of_cases_lab_confirmed, ",","")),
       no_of_cases_on_admission = as.integer(str_replace(no_of_cases_on_admission, ",",""))
@@ -41,14 +41,19 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
   
   # Export 
   nga_covid %>% 
-    write_csv(path = paste0(dir_dataout, "/nga_ncdc_covid_data.csv"), na = "")
+    write_csv(path = paste0(dir_dataout, "/nga_ncdc_covid_data_", Sys.Date(), ".csv"), na = "")
 
   # Government Measures
   
-  nga_govm <- extract_excel_data(src_page = hdx_acaps, link_id = xfile) %>% 
+  govm <- extract_excel_data(src_page = hdx_acaps, link_id = xfile, file_sheet = "Database") 
+  
+  govm %>% glimpse()
+  
+  nga_govm <- govm %>% 
     filter(iso == 'NGA') %>% 
     dplyr::select(
-      admin_name = admin_level_name, category, measure, non_compliance,
+      admin_name = admin_level_name, 
+      category, measure, non_compliance,
       targeted = targeted_pop_group, 
       idate = date_implemented
     ) %>% 
@@ -63,5 +68,5 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
   
   # Export 
   nga_govm %>% 
-    write_csv(path = paste0(dir_dataout, "/nga_acaps_gov_measures_data.csv"), na = "")
+    write_csv(path = paste0(dir_dataout, "/nga_acaps_gov_measures_data_", Sys.Date(), ".csv"), na = "")
   
