@@ -1,11 +1,10 @@
 ## PROJECT:  COVID ANALYTICS
 ## AUTHOR:   T. Essam | USAID
 ## LICENSE:  MIT
-## PURPOSE:  Munge and plot Nigeria COVID milestones
+## PURPOSE:  Plot COVID-19 miilestones with HFR treatment indicators
 ## NOTE:     
 ## DATE:     2020-04-2
 ## UPDATED:  2020-04-27
-
 
 
 # LIBRARIES ---------------------------------------------------------------
@@ -25,7 +24,7 @@ scales::show_col(c("#009392", "#72aaa1", "#b1c7b3", "#f1eac8", "#e5b9ad", "#d989
  norm_color <- "#b1c7b3"
  drop_color <- "#f1eac8"
 
-
+ 
 # ANALYTICAL PLOTS --------------------------------------------------------
 
   #BIG PICTURE FIRST - trends across time
@@ -73,12 +72,12 @@ ggsave(file.path(viz_out, paste0("NGA_WHY_IT_MATTERS_Plot", ".png")),
 # -------------------------------------------------------------------------------
 # Focusing just on TX_CURR for presentation
 hfr_rollup %>% 
-    filter(indicator =="TX_CURR") %>% 
-    group_by(indicator, date) %>% 
+    filter(indicator =="TX_CURR", state %in% c("Akwa-Ibom State", "Cross River State", "Lagos State")) %>% 
+    group_by(indicator, date, state) %>% 
     summarise(value = sum(value, na.rm = TRUE),
       n = n()) %>% 
-    group_by(indicator) %>% 
-    mutate(y = 10000) %>% 
+    group_by(indicator, state) %>% 
+    mutate(y = 3000) %>% 
     ungroup() %>% 
     ggplot(aes(x = date, y = value)) +
     #geom_vline(xintercept = df_who$date, size = 2, color = grey10k) +
@@ -90,16 +89,17 @@ hfr_rollup %>%
       fill = case_when(
         n > 500            ~ "#e5b9ad", 
         n > 440 & n <= 500 ~ "#b1c7b3", 
-        TRUE               ~ "#f1eac8")
+        TRUE               ~ "#b1c7b3")
     ),  
       shape = 21, size = 8, stroke = 0.1, colour = "white")+
     geom_text(aes(label = n, y = y), size = 3)+
     scale_y_continuous(labels = comma) +
     scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y")  +
     scale_fill_identity() +
+  facet_wrap(~state, ncol = 1, scales = "free_y") +
     labs(x = NULL, y = NULL, 
       title = "TX_CURR: USING NIGERIA HFR DATA TO MONITOR TREATMENT TRENDS",
-      subtitle = "Line graph shows TX_CURR weekly levels. Circles reflect the number of sites reporting.",
+      subtitle = "Line graph shows TX_CURR weekly levels. Circles reflect the number of sites reporting. \n",
       caption = "Source: Nigeria HFR Weekly Data") +
     si_style_ygrid() +
     # annotate(geom="text", x = as.Date("2019-12-23"),
@@ -115,14 +115,52 @@ hfr_rollup %>%
       strip.text = element_text(face = "bold"),
       panel.spacing = unit(2, "lines"))
 
-  ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Plot", ".png")),
-    plot = last_plot(), dpi = 320, width = 9.5, height = 3.75, device = "png",
-    scale = 1)
+  ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Plot_states", ".png")),
+    plot = last_plot(), dpi = 320,  width = 10, height = 5.625, device = "png",
+    scale = 1.25)
+  
+  
 
-
+# TX_NET_NEW by SELECT STATES ---------------------------------------------
+  hfr_rollup %>% 
+    filter(indicator =="TX_CURR", state %in% c("Akwa-Ibom State", "Cross River State", "Lagos State")) %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(value = sum(value, na.rm = TRUE),
+      n = n()) %>% 
+    arrange(state, date) %>% 
+    group_by(state) %>% 
+    mutate(tx_net_new = value - lag(value, order_by = date),
+      y = -9000) %>% 
+    ungroup() %>% 
+    ggplot(aes(x = date, y = tx_net_new)) +
+    #geom_vline(xintercept = df_who$date, size = 2, color = grey10k) +
+    geom_vline(xintercept = nga_first, size = 2, colour = grey20k, alpha = 0.80) +
+    geom_vline(xintercept = nga_holiday, colour = grey20k, size = 2, alpha = 0.80) +
+    geom_vline(xintercept = as.Date("2020-03-30"), size = 2, colour = grey20k, alpha = 0.80) +  
+    geom_col(aes(fill = if_else(tx_net_new > 0, "#8ba68a", "#a68a8b")))  +
+    facet_wrap(~state, ncol = 1) +
+    scale_y_continuous(labels = comma) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y")  +
+    scale_fill_identity() +
+    facet_wrap(~state, ncol = 1, scales = "free_y") +
+    labs(x = NULL, y = NULL, 
+      title = "TX_NET_NEW: USING NIGERIA HFR DATA TO MONITOR TREATMENT TRENDS",
+      subtitle = "Length of the bar reprsents TX_NET_NEW on a weekly basis. \n",
+      caption = "Source: Nigeria HFR Weekly Data") +
+    si_style_ygrid() +
+    theme(legend.position = "null",
+      strip.text = element_text(face = "bold"),
+      panel.spacing = unit(2, "lines"))
+  
+  ggsave(file.path(viz_out, paste0("TX_NET_NEW_Plot_states", ".png")),
+    plot = last_plot(), dpi = 320,  width = 10, height = 5.625, device = "png",
+    scale = 1.25)  
+  
+  
 # VIZ BY STATES - LARGEST DROP IN PARTNERS REPORTING ----------------------
 
   # Set the total number of sites to appear 1 week after max date
+  # Was going to use this at the end of a heatmap
   max_sites <- hfr_rollup %>% filter(indicator == "TX_CURR") %>% 
     group_by(indicator, date, state) %>% 
     summarise(n = n()) %>% 
@@ -152,7 +190,7 @@ hfr_rollup %>%
     geom_errorbar(aes(x=date, ymin=n, ymax=n), size=0.5, width=5, colour = grey50k) +
    scale_fill_identity() +
     # geom_smooth(se = FALSE, span = 0.5,, size = 1.5, colour = grey50k) + 
-    facet_wrap(~state_pct, scales = "free_y", ncol = 4)+
+    facet_wrap(~state_pct, scales = "free_y", ncol = 4) +
       #labeller = label_wrap_gen(width = 20, multi_line = TRUE)) +
   si_style_xline() + theme(axis.text.y = element_blank())  +
     labs(x = NULL, y = NULL, 
