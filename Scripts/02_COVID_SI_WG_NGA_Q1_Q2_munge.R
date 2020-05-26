@@ -137,14 +137,16 @@ library(COVIDutilities)
     ungroup() %>% 
     arrange(orgunituid, indicator, date) %>% 
     group_by(orgunituid, indicator) %>% 
-    mutate(pct_change = lag_calc(value, lag(value, order_by = date)), 
+    mutate(
+      pct_change = lag_calc(value, lag(value, order_by = date)), 
       outlier_flag = ifelse(abs(pct_change) > 1 & value > outlier_thresh, 1, 0),
-    site_flag = if_else(outlier_flag == 1, 1, NA_real_),
+      site_flag = if_else(outlier_flag == 1, 1, NA_real_),
       site_run = n()) %>%
-  fill(site_flag, .direction = "updown") %>% 
+    fill(site_flag, .direction = "updown") %>% 
     ungroup() %>% 
     left_join(., date_seq) %>% 
-    mutate(mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(), 
+    mutate(
+      mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(), 
       mech_code = as.numeric(mech_code)) %>% 
     group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
     mutate(missing_count = sum(is.na(value))) %>% 
