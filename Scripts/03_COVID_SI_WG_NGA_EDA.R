@@ -124,6 +124,7 @@ hfr_rollup %>%
 # TX_NET_NEW by SELECT STATES ---------------------------------------------
   hfr_rollup %>% 
     filter(indicator =="TX_CURR", state %in% c("Akwa-Ibom State", "Cross River State", "Lagos State")) %>% 
+    
     group_by(indicator, date, state) %>% 
     summarise(value = sum(value, na.rm = TRUE),
       n = n()) %>% 
@@ -204,4 +205,35 @@ hfr_rollup %>%
     scale = 1.25)
   
 
+# COMPLETENESS BAR GRAPH FOR STATES---------------------------------------------------------------
 
+  # By State
+  hfr_rollup %>% 
+    filter(indicator =="TX_CURR" & date >= "2020-3-1") %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, state) %>% 
+    mutate(max = max(n, na.rm = TRUE), 
+      max_date = max(date)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(state, indicator) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    ungroup() %>% 
+    filter(date == max_date) %>% 
+    mutate(state_pct = fct_reorder2(state_pct, max, -ave_reporting)) %>% 
+    ggplot(aes(y= ave_reporting, x = state_pct)) +
+    geom_col(aes(y = 1), fill = grey10k, alpha = 0.75) +
+    geom_col(aes(fill = if_else(.data$state %in% c("Kano State", "Jigawa State"), "#b1c7b3", "#d8e3d8"))) + 
+    geom_errorbar(aes(x = state_pct, ymin = ave_reporting, ymax = ave_reporting), size=0.5, width = 0.8, colour = grey50k) +
+    coord_flip() +
+    scale_fill_identity() +
+    scale_y_continuous(labels = scales::percent) +
+    si_style_xline() +
+    labs(x = NULL, y = NULL, 
+      title = "TX_CURR: SITE REPORTING RATES HAVE DECLINED THE MOST IN KANO STATE AND JIGAWA STATE SINCE LOCKDOWN",
+      subtitle = "State level site reporting rates since March 1st, ordered from largest site count to smallest \n",
+      caption = "Nigeria HFR Weekly Data")
+   
+  

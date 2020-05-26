@@ -152,17 +152,18 @@ library(COVIDutilities)
   hfr_rollup %>% 
     filter(site_flag == 1) %>% 
     group_by_at(vars(date, orgunit, orgunituid,	mech_code, partner,	indicator, state, operatingunit)) %>% 
-    summarise(value = sum(value, na.rm = TRUE)) %>% 
+    summarise(value = sum(value, na.rm = TRUE))%>% 
     spread(date, value) %>% 
     write_csv(here(data_out, "NGA_outlier_sites.csv"), na = "")
 
 
+  write_csv(hfr_rollup, here(data_out, "HFR_rollup_2020_05_26.csv"))
 
 # VISUALIZE NUMBER OF SITES REPORTING --------------------------------------
 
   # Number of sites reporting by week
   hfr_rollup %>% 
-    filter(indicator == "HTS_TST") %>%  
+    filter(indicator == "TX_CURR") %>%  
     group_by(date, indicator) %>% 
     summarise(total = sum(value, na.rm = TRUE),
       n_obs = n()) %>% 
@@ -183,10 +184,10 @@ library(COVIDutilities)
     theme(legend.position = "none",
       axis.text.y = element_blank()) +
     labs(x = NULL, y = NULL, 
-      title = "Indicator HTS_TST: The number of sites submitting data feel sharply at the end of March", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
+      title = "Indicator TX_CURR: The number of sites submitting data fell sharply at the end of March", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
       caption = "Source: Nigeria HFR Weekly Data")
   
-  ggsave(file.path(viz_out, paste0("NGA_HTS_TST_Site_submission_count", ".png")),
+  ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Site_submission_count", ".png")),
     plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
     scale = 1.2)
   
