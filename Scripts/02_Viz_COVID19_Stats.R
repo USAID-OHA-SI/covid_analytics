@@ -35,6 +35,8 @@ library(ggpattern)
   
   ncdc <- "https://covid19.ncdc.gov.ng/"
   tbl <- "table#custom1"
+  
+  hfr_completeness <- "HFR_rollup_2020_05_26.csv"
 
 # FUNCTIONS ----------------------------------------------------------
   
@@ -223,6 +225,40 @@ library(ggpattern)
     "Related Deaths"
   ) %>% 
     setNames(covid_map_cols)
+  
+  
+  ## Reporting Completeness
+  hfr_rollup <- read_csv(here(dir_dataout, hfr_completeness))
+  
+  viz_complete <- hfr_rollup %>% 
+    mutate(state = gsub(" State", "", state)) %>% 
+    filter(indicator =="TX_CURR" & date >= "2020-3-1") %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, state) %>% 
+    mutate(max = max(n, na.rm = TRUE), 
+           max_date = max(date)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(state, indicator) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    #mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    mutate(state_pct = paste0(state, ", ", round(ave_reporting * 100, 0),"%")) %>% 
+    ungroup() %>% 
+    filter(date == max_date) %>% 
+    mutate(state_pct = fct_reorder(state_pct, max)) %>% 
+    ggplot(aes(y= ave_reporting, x = reorder(state_pct, ave_reporting))) +
+    geom_col(aes(y = 1), fill = grey10k, alpha = 0.75) +
+    geom_col(aes(fill = if_else(.data$state %in% c("Kano State", "Jigawa State"), "#b1c7b3", "#d8e3d8"))) + 
+    geom_errorbar(aes(x = state_pct, ymin = ave_reporting, ymax = ave_reporting), size=0.5, width = 0.8, colour = grey50k) +
+    coord_flip() +
+    scale_fill_identity() +
+    scale_y_continuous(labels = scales::percent) +
+    si_style_xline() +
+    labs(x = NULL, y = NULL, 
+         #title = "TX_CURR: SITE REPORTING RATES SINCE LOCKDOWN",
+         #subtitle = "State level site reporting rates since March 1st",
+         caption = "HFR Data, % complete since lockdown")
 
   
   ## Combine maps + plots and save
@@ -242,7 +278,7 @@ library(ggpattern)
       
       bar <- bar_chart(nga_covid_geo, map_col)
       
-      map + bar +
+      map + (bar / viz_complete) +
         plot_layout(widths = c(2,1))
       
       ggsave(filename = here(dir_graphics, paste0(map_title, " by states.png")),

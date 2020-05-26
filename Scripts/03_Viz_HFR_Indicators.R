@@ -188,7 +188,7 @@ outlier_thresh = 100
       mer_results = sum(mer_results, na.rm = T),
       mer_targets = sum(mer_targets, na.rm = T)
     ) %>%
-    ungroup()
+    ungroup() #4,338
   
   nga_sites_targets <- nga_targets %>% 
     group_by(orgunit, orgunituid, indicator) %>% 
