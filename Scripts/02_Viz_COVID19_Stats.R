@@ -18,7 +18,7 @@ library(janitor)
 library(here)
 library(patchwork)
 library(ggthemes)
-library(ggpattern)
+
 
 # REQUIRED
 
@@ -241,8 +241,7 @@ library(ggpattern)
     ungroup() %>% 
     mutate(reporting_rate = n / max)%>% 
     group_by(state, indicator) %>% 
-    mutate(ave_reporting = (sum(n) / sum(max))) %>%
-    #mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%#mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
     mutate(state_pct = paste0(state, ", ", round(ave_reporting * 100, 0),"%")) %>% 
     ungroup() %>% 
     filter(date == max_date) %>% 
@@ -255,9 +254,7 @@ library(ggpattern)
     scale_fill_identity() +
     scale_y_continuous(labels = scales::percent) +
     si_style_xline() +
-    labs(x = NULL, y = NULL, 
-         #title = "TX_CURR: SITE REPORTING RATES SINCE LOCKDOWN",
-         #subtitle = "State level site reporting rates since March 1st",
+    labs(x = NULL, y = NULL,
          caption = "HFR Data, % complete since lockdown")
 
   
