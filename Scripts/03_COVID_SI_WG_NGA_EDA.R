@@ -200,9 +200,45 @@ hfr_rollup %>%
       caption = "Nigeria HFR Weekly Data")
     
   
-  ggsave(file.path(viz_out, paste0("NGA_site_completion_rates", ".png")),
+  ggsave(file.path(viz_out, paste0("NGA_mechanism_completion_rates", ".png")),
     plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
     scale = 1.25)
+  
+
+#  COMPLETENESS BY MECH ---------------------------------------------------
+  hfr_rollup %>% 
+    filter(indicator =="TX_CURR") %>% 
+    group_by(indicator, date, mech_code, partner) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, mech_code, partner)%>% 
+    mutate(max = max(n, na.rm = TRUE), 
+      max_date = max(date)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(mech_code, indicator) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    mutate(mech_pct = paste0(partner, "\n", mech_code, " ", 
+      round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    ungroup()  %>% 
+    mutate(state_pct = fct_reorder(mech_pct, max, .desc = TRUE)) %>% 
+    ggplot(aes(x = date, y = n)) + geom_col(aes(y = max), fill = grey10k, alpha = 0.75) +
+    geom_vline(xintercept = as.Date("2020-03-30"), linetype = "dashed", colour = grey50k) +
+    geom_col(aes(fill = "#d8e3d8")) + 
+    geom_errorbar(aes(x=date, ymin=n, ymax=n), size=0.5, width=5, colour = grey50k) +
+    scale_fill_identity() +
+    # geom_smooth(se = FALSE, span = 0.5,, size = 1.5, colour = grey50k) + 
+    facet_wrap(~state_pct, scales = "free_y", ncol = 4) +
+    #labeller = label_wrap_gen(width = 20, multi_line = TRUE)) +
+    si_style_xline() + theme(axis.text.y = element_blank())  +
+    labs(x = NULL, y = NULL, 
+      title = "TX_CURR: SITE REPORTING RATES HAVE DECLINED THE MOST IN KANO STATE AND JIGAWA STATE SINCE LOCKDOWN",
+      subtitle = "State level site reporting rates by period, ordered from largest site count to smallest \n",
+      caption = "Nigeria HFR Weekly Data")
+  
+  ggsave(file.path(viz_out, paste0("NGA_mech_completion_rates", ".png")),
+    plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
+    scale = 1.25) 
+  
   
 
 # COMPLETENESS BAR GRAPH FOR STATES---------------------------------------------------------------
