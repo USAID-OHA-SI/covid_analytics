@@ -98,6 +98,9 @@ library(COVIDutilities)
   df_datim_tx_curr %>% count(results_to_targets)
   df_datim_tx_curr %>% summarise(total = sum(mer_targets, na.rm = TRUE))
   
+  #NOTES: Am not merging at this point b/c of all the OPUs that are either outstanding
+  # or have not been submitted. Lots of partner shifts make target merge messy.
+  
 
 # LOAD AND MUNGE DATA FROM 2020-05-22 -------------------------------------
   hfr_read <- read_excel(here(data_in, "HFR_Performance.xlsx"))
@@ -156,17 +159,18 @@ library(COVIDutilities)
   hfr_rollup %>% 
     filter(site_flag == 1) %>% 
     group_by_at(vars(date, orgunit, orgunituid,	mech_code, partner,	indicator, state, operatingunit)) %>% 
-    summarise(value = sum(value, na.rm = TRUE)) %>% 
+    summarise(value = sum(value, na.rm = TRUE))%>% 
     spread(date, value) %>% 
     write_csv(here(data_out, "NGA_outlier_sites.csv"), na = "")
 
 
+  write_csv(hfr_rollup, here(data_out, "HFR_rollup_2020_05_26.csv"))
 
 # VISUALIZE NUMBER OF SITES REPORTING --------------------------------------
   
   # Number of sites reporting by week
   hfr_rollup %>% 
-    filter(indicator == "HTS_TST") %>%  
+    filter(indicator == "TX_CURR") %>%  
     group_by(date, indicator) %>% 
     summarise(total = sum(value, na.rm = TRUE),
       n_obs = n()) %>% 
@@ -187,10 +191,10 @@ library(COVIDutilities)
     theme(legend.position = "none",
       axis.text.y = element_blank()) +
     labs(x = NULL, y = NULL, 
-      title = "Indicator HTS_TST: The number of sites submitting data feel sharply at the end of March", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
+      title = "Indicator TX_CURR: The number of sites submitting data fell sharply at the end of March", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
       caption = "Source: Nigeria HFR Weekly Data")
   
-  ggsave(file.path(viz_out, paste0("NGA_HTS_TST_Site_submission_count", ".png")),
+  ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Site_submission_count", ".png")),
     plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
     scale = 1.2)
   
@@ -344,47 +348,7 @@ library(COVIDutilities)
     #     spread(date, value)%>% 
     #     write_csv(., here(data_out, "NGA_HFR_count_all_wide.csv"))
   
-
-# VISUALIZE DUPLICATES ----------------------------------------------------
-
-  # Number of sites reporting by week
-  hfr %>% 
-    #filter(indicator %in% ind_order, indicator != "PrEP_NEW") %>% 
-    filter(indicator == "TX_CURR") %>%  
-    group_by(date, indicator) %>% 
-    summarise(total = sum(value, na.rm = TRUE),
-              row_count = n()) %>% 
-    ggplot(aes(date, row_count)) + 
-    geom_vline(xintercept = nga_first, size = 2, colour = grey40k, alpha = 0.80) +
-    geom_vline(xintercept = as.Date("2020-03-30"), size = 2, colour = grey40k, alpha = 0.80) +
-    geom_line(colour = grey40k) +
-    geom_point(aes(fill = case_when(
-      row_count > 482           ~ "#e5b9ad", 
-      row_count > 440 & row_count <= 500 ~ "#b1c7b3", 
-      TRUE               ~ "#f1eac8")),  
-      size = 12, shape = 21, colour = grey80k) +
-    geom_text(aes(label = row_count)) +
-    si_style_xline() + 
-    #facet_wrap(~indicator) +
-    scale_fill_identity() +
-    scale_x_date(date_breaks = "1 month", date_labels = "%b-%Y")  +
-    theme(legend.position = "none",
-          axis.text.y = element_blank()) +
-    labs(x = NULL, y = NULL, 
-         title = "Indicator TX_CURR: The number of sites submitting data spiked on September 30th, 2019 & March 30th, 2020", subtitle = "Circles represent the number of sites reported into the HFR database, per week",
-         caption = "Source: Nigeria HFR Weekly Data")
-    
-  ggsave(file.path(viz_out, paste0("NGA_TX_CURR_Site_submission_count", ".png")),
-         plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
-         scale = 1.25)
-
   
-  hfr %>% 
-    count(state, partner, date, mech_code, indicator) %>% 
-    spread(date, n) %>% 
-    write_csv(., here(data_out, "NGA_HFR_count_all_indic_wide.csv"))
-  
-
 # HFR DATA UPDATE & MUNGING RESPONSE --------------------------------------
 
   # So Nigeria HFR data is a unique case where you have partner shifts occuring during the year.
