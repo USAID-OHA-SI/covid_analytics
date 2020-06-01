@@ -37,7 +37,8 @@ scales::show_col(c("#009392", "#72aaa1", "#b1c7b3", "#f1eac8", "#e5b9ad", "#d989
   mutate(y = (mean(value, na.rm = TRUE) *.10),
     pct_change = lag_calc(value, lag(value, order_by = date)),
     max_change = min(pct_change, na.rm = TRUE)) %>% 
-  ungroup() %>% 
+  ungroup() %>% prinf()
+   
     ggplot(aes(x = date, y = value)) +
     #geom_vline(xintercept = df_who$date, size = 2, color = grey10k) +
     geom_vline(xintercept = nga_first, size = 2, colour = grey20k, alpha = 0.80) +
@@ -205,6 +206,31 @@ hfr_rollup %>%
     scale = 1.25)
   
 
+
+# COMPLETENESS BY ALL KEY VARIABLES ---------------------------------------
+  hfr_rollup %>% 
+    filter(indicator == "HTS_TST") %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, state) %>% 
+    mutate(max = max(n, na.rm = TRUE), 
+      max_date = max(date)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(state, indicator) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    ungroup() %>% 
+    mutate(state_pct = fct_reorder(state_pct, max)) %>% 
+    ggplot(aes(x = date, y = state_pct, fill = reporting_rate)) +
+    geom_tile(colour = "white", size = 0.25) +
+    geom_text(aes(label = if_else(reporting_rate <= 0.75, paste0(percent(round(reporting_rate, 2), 1)), NA_character_)),
+      colour = "white") +
+    scale_fill_viridis_c(option = "A", alpha = 0.85, direction = 1, end = .95) +
+    si_style_nolines()
+  
+  
+  
 #  COMPLETENESS BY MECH ---------------------------------------------------
   hfr_rollup %>% 
     filter(indicator =="TX_CURR") %>% 
