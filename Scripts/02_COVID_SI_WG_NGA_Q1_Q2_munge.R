@@ -12,7 +12,6 @@ library(tidyverse)
 library(glitr)
 library(readxl)
 library(here)
-library(glitr)
 library(glamr)
 library(ISOcodes)
 library(rvest)
@@ -50,7 +49,12 @@ library(COVIDutilities)
   norm_color <- "#b1c7b3"
   drop_color <- "#f1eac8"
   
-  
+  wapo_dorange <- si_colors$wapo_dorange
+  grey10k <- si_colors$si_grey10K
+  grey20k <- si_colors$grey20
+  grey40k <- si_colors$grey40
+  grey50k <- si_colors$grey50
+  grey80k <- si_colors$grey80
   
 # LOAD AND MUNGE COVID CASES FROM JHU & GOVERNMENT MEASURES  ------------------------------------------------
 
@@ -72,6 +76,7 @@ library(COVIDutilities)
   # Load Nigeria Target information
   
   target_files <- list.files(here(data_in), pattern = "HFR_FY20Q1", full.names = TRUE) 
+  
   df_datim <- map_dfr(.x = target_files,
     .f = ~readr::read_csv(.x))  
   
@@ -135,14 +140,16 @@ library(COVIDutilities)
     ungroup() %>% 
     arrange(orgunituid, indicator, date) %>% 
     group_by(orgunituid, indicator) %>% 
-    mutate(pct_change = lag_calc(value, lag(value, order_by = date)), 
+    mutate(
+      pct_change = lag_calc(value, lag(value, order_by = date)), 
       outlier_flag = ifelse(abs(pct_change) > 1 & value > outlier_thresh, 1, 0),
-    site_flag = if_else(outlier_flag == 1, 1, NA_real_),
+      site_flag = if_else(outlier_flag == 1, 1, NA_real_),
       site_run = n()) %>%
-  fill(site_flag, .direction = "updown") %>% 
+    fill(site_flag, .direction = "updown") %>% 
     ungroup() %>% 
     left_join(., date_seq) %>% 
-    mutate(mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(), 
+    mutate(
+      mech_indicator = interaction(mech_code, indicator, sep = "_") %>% as.character(), 
       mech_code = as.numeric(mech_code)) %>% 
     group_by(orgunituid, indicator, mech_code, orgunit, partner) %>% 
     mutate(missing_count = sum(is.na(value))) %>% 
@@ -160,7 +167,7 @@ library(COVIDutilities)
   write_csv(hfr_rollup, here(data_out, "HFR_rollup_2020_05_26.csv"))
 
 # VISUALIZE NUMBER OF SITES REPORTING --------------------------------------
-
+  
   # Number of sites reporting by week
   hfr_rollup %>% 
     filter(indicator == "TX_CURR") %>%  
@@ -197,8 +204,11 @@ library(COVIDutilities)
 
   # Heatmap to familiarize with each mechanism
   heat_plot <- function(mech_indicator) {
-    ip <- hfr_rollup %>% filter(mech_indicator == {{mech_indicator}}) %>% 
-      count(partner) %>% select(-n) %>% pull() 
+    ip <- hfr_rollup %>% 
+      filter(mech_indicator == {{mech_indicator}}) %>% 
+      count(partner) %>% 
+      dplyr::select(-n) %>% 
+      pull() 
     
     hfr_rollup %>% 
       filter(mech_indicator == {{mech_indicator}}) %>% 
@@ -221,8 +231,8 @@ library(COVIDutilities)
     return(last_plot())
   }
   
-  
   heat_plot(mech_indicator = "18655_TX_CURR")
+  
   unique(hfr_rollup %>% filter(indicator %in% c("TX_CURR")) %>% select(mech_indicator)) %>% 
     pull() %>% 
     walk(heat_plot)  
@@ -233,7 +243,8 @@ library(COVIDutilities)
     
     hfr_rollup %>% 
       filter(state == {{state}} & indicator == "TX_CURR") %>%
-      count(orgunituid, partner, state, orgunit) %>% prinf()
+      count(orgunituid, partner, state, orgunit) %>% 
+      prinf()
     
     hfr_rollup %>% 
       filter(state == {{state}} & indicator == "TX_CURR") %>%
@@ -251,6 +262,8 @@ library(COVIDutilities)
       plot = last_plot(), dpi = 320, width = 10, height = 5.625, device = "png",
       scale = 2)
   }
+  
+  
   
   # No TX_CURR in Anambra
   unique(hfr_rollup$state[hfr_rollup$state != "Anambra state"]) %>% 
