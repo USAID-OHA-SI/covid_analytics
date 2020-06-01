@@ -152,7 +152,7 @@ library(COVIDutilities)
   hfr_rollup %>% 
     filter(site_flag == 1) %>% 
     group_by_at(vars(date, orgunit, orgunituid,	mech_code, partner,	indicator, state, operatingunit)) %>% 
-    summarise(value = sum(value, na.rm = TRUE))%>% 
+    summarise(value = sum(value, na.rm = TRUE)) %>% 
     spread(date, value) %>% 
     write_csv(here(data_out, "NGA_outlier_sites.csv"), na = "")
 
