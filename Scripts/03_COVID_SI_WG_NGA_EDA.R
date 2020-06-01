@@ -36,7 +36,7 @@ scales::show_col(c("#009392", "#72aaa1", "#b1c7b3", "#f1eac8", "#e5b9ad", "#d989
     mutate(y = (mean(value, na.rm = TRUE) *.10),
     pct_change = lag_calc(value, lag(value, order_by = date)),
     max_change = min(pct_change, na.rm = TRUE)) %>% 
-    ungroup() %>% 
+    ungroup() %>%
     ggplot(aes(x = date, y = value)) +
     #geom_vline(xintercept = df_who$date, size = 2, color = grey10k) +
     geom_vline(xintercept = nga_first, size = 2, colour = grey20k, alpha = 0.80) +
@@ -175,6 +175,53 @@ hfr_rollup %>%
     ) 
 
 
+# Create a function so we can loop over indicators/states for a summary plot
+state_comp_plot <- function(ind) {
+  
+  title_name <- hfr_rollup %>% filter(indicator == {{ind}}) %>% count(indicator) %>% pull(1)
+  
+  plot <- hfr_rollup %>% 
+    filter(indicator == {{ind}}) %>% 
+    group_by(date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(state) %>% 
+    mutate(max = max(n, na.rm = TRUE), 
+      max_date = max(date, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(state) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    ungroup() %>% 
+    mutate(state_pct = fct_reorder(state_pct, max, .desc = TRUE)) %>% 
+    ggplot(aes(x = date, y = n)) + geom_col(aes(y = max), fill = grey10k, alpha = 0.75) +
+    geom_vline(xintercept = as.Date("2020-03-30"), linetype = "dashed", colour = grey50k) +
+    geom_col(aes(fill = if_else(.data$ave_reporting <= 0.75, "#b1c7b3", "#d8e3d8"))) + 
+    geom_errorbar(aes(x = date, ymin = n, ymax = n), size = 0.5, width = 5, colour = grey50k) +
+    scale_fill_identity() +
+    # geom_smooth(se = FALSE, span = 0.5,, size = 1.5, colour = grey50k) + 
+    facet_wrap(~state_pct, scales = "free_y", ncol = 4) +
+    #labeller = label_wrap_gen(width = 20, multi_line = TRUE)) +
+    si_style_xline() + theme(axis.text.y = element_blank())  +
+    labs(x = NULL, y = NULL, 
+      title = paste0(title_name, ": ", "SITE REPORTING RATES BY STATE"),
+      subtitle = "State level site reporting rates by period, ordered from largest site count to smallest.\nDotted line represents COVID-19 lockdown measures. \n",
+      caption = "Nigeria HFR Weekly Data")
+  
+  ggsave(file.path(viz_out, paste0(title_name, "_completness_rates", ".png")),
+    plot = plot, dpi = 320, width = 10, height = 5.625, device = "png",
+    scale = 1.25)
+  
+  print(plot)
+}
+  
+state_comp_plot(ind = "HTS_TST")
+unique(hfr_rollup$indicator) %>% 
+  walk(state_comp_plot)
+  
+  
+  
+  
 # By State
   hfr_rollup %>% 
     filter(indicator =="TX_CURR") %>% 
@@ -212,6 +259,31 @@ hfr_rollup %>%
     scale = 1.25)
   
 
+
+# COMPLETENESS BY ALL KEY VARIABLES ---------------------------------------
+  hfr_rollup %>% 
+    filter(indicator == "HTS_TST") %>% 
+    group_by(indicator, date, state) %>% 
+    summarise(n = n()) %>% 
+    group_by(indicator, state) %>% 
+    mutate(max = max(n, na.rm = TRUE), 
+      max_date = max(date)) %>% 
+    ungroup() %>% 
+    mutate(reporting_rate = n / max)%>% 
+    group_by(state, indicator) %>% 
+    mutate(ave_reporting = (sum(n) / sum(max))) %>%
+    mutate(state_pct = paste0(state, " ", round(ave_reporting * 100, 0),"%", "\n", "(", max, " sites)")) %>% 
+    ungroup() %>% 
+    mutate(state_pct = fct_reorder(state_pct, max)) %>% 
+    ggplot(aes(x = date, y = state_pct, fill = reporting_rate)) +
+    geom_tile(colour = "white", size = 0.25) +
+    geom_text(aes(label = if_else(reporting_rate <= 0.75, paste0(percent(round(reporting_rate, 2), 1)), NA_character_)),
+      colour = "white") +
+    scale_fill_viridis_c(option = "A", alpha = 0.85, direction = 1, end = .95) +
+    si_style_nolines()
+  
+  
+  
 #  COMPLETENESS BY MECH ---------------------------------------------------
   hfr_rollup %>% 
     filter(indicator =="TX_CURR") %>% 
