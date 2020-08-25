@@ -8,12 +8,14 @@
 
 library(glamr)        # SI Utilities
 library(tidyverse)    # Data wrangling
+library(vroom)
 library(raster)       # getData function is here
 library(rasterVis)
 library(sf)
 library(glitr)        # SI Plotting
 library(RColorBrewer) # Colors Schemes
 library(lubridate)    # Date parser
+library(janitor)
 
 # GLOBAL --------------------------------------------------------
 
@@ -26,9 +28,11 @@ tbl <- "table#custom1"
 hdx_acaps <- "https://data.humdata.org/dataset/acaps-covid19-government-measures-dataset"
 xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics ga-download']"
 
+jhu_covid <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+
 # DATA ----------------------------------------------------------
 
-  # COVID-19 Stats
+  ## NGA COVID-19 Stats
   
   nga_covid <- extract_tbl_data(src_url = ncdc, tbl_id = tbl) 
 
@@ -39,15 +43,13 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
       no_of_cases_on_admission = as.integer(str_replace(no_of_cases_on_admission, ",",""))
     )
   
-  # Export 
+  ## Export 
   nga_covid %>% 
     write_csv(path = paste0(dir_dataout, "/nga_ncdc_covid_data_", Sys.Date(), ".csv"), na = "")
 
-  # Government Measures
+  ## NGA Government Measures
   
   govm <- extract_excel_data(src_page = hdx_acaps, link_id = xfile, file_sheet = "Database") 
-  
-  govm %>% glimpse()
   
   nga_govm <- govm %>% 
     filter(iso == 'NGA') %>% 
@@ -69,4 +71,22 @@ xfile <- "a[class='btn btn-empty btn-empty-blue hdx-btn resource-url-analytics g
   # Export 
   nga_govm %>% 
     write_csv(path = paste0(dir_dataout, "/nga_acaps_gov_measures_data_", Sys.Date(), ".csv"), na = "")
+  
+  ## GLOBAL COVID Data
+  
+  df_covid <- jhu_covid %>% 
+    vroom()
+  
+  df_covid %>% glimpse()
+  df_covid %>% View()
+  
+  df_covid <- df_covid %>% 
+    gather(key = "rep_date", value = "cases", -c(1:4)) %>% 
+    clean_names() %>% 
+    mutate(
+      rep_date = mdy(rep_date)
+    ) 
+  
+  df_covid %>% 
+    write_csv(path = paste0(dir_dataout, "/global_covid_data_", as.Date(Sys.Date(), "%Y%m%d"), ".csv"), na = "")
   
