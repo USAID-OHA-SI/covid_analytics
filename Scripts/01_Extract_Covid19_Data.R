@@ -3,6 +3,7 @@
 ## LICENSE:  MIT
 ## PURPOSE:  Extract COVID-19 and Other related data from public sources
 ## Date:     2020-05-14
+## Updated:  2020-08-25
 
 # LIBRARIES ----------------------------------------------------
 
@@ -74,8 +75,7 @@ jhu_covid <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/c
   
   ## GLOBAL COVID Data
   
-  df_covid <- jhu_covid %>% 
-    vroom()
+  df_covid <- jhu_covid %>% vroom()
   
   df_covid %>% glimpse()
   df_covid %>% View()
@@ -84,8 +84,36 @@ jhu_covid <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/c
     gather(key = "rep_date", value = "cases", -c(1:4)) %>% 
     clean_names() %>% 
     mutate(
-      rep_date = mdy(rep_date)
+      rep_date = mdy(rep_date),
+      rep_month = month(rep_date),
+      rep_day = day(rep_date),
+      rep_year = year(rep_date)
     ) 
+  
+  df_covid %>% head() %>% prinf()
+  
+  df_covid %>% 
+    dplyr::select(-province_state) %>% 
+    group_by(country_region) %>% 
+    summarise_at(vars(cases, rep_month, rep_year), sum, na.rm = TRUE) %>% View()
+  
+  
+  df_covid %>% 
+    dplyr::select(-province_state) %>% 
+    group_by(country_region) %>% 
+    summarise_at(
+      min_case = min(cases),
+      max_case = max(cases),
+      cases = sum(cases, na.rm = TRUE),
+      n = n()
+    ) %>% View()
+  
+  df_covid %>% 
+    dplyr::select(-province_state) %>%
+    add_count(country_region, rep_month) %>% 
+    View()
+    
+  
   
   df_covid %>% 
     write_csv(path = paste0(dir_dataout, "/global_covid_data_", as.Date(Sys.Date(), "%Y%m%d"), ".csv"), na = "")
