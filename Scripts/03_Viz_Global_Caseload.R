@@ -2,7 +2,7 @@
 ## AUTHOR:   B.Kagniniwa | USAID
 ## LICENSE:  MIT
 ## PURPOSE:  Extract COVID-19 and Other related data from public sources
-## Date:     2020-08-25
+## Date:     2020-08-26
 
 
 # LIBRARIES ----------------------------------------------------
@@ -22,12 +22,16 @@ library(lubridate)
 library(ggthemes)
 library(patchwork)
 library(COVIDutilities)
+library(Wavelength)
 library(here)
 
 # REQUIRED - Run to load get_geodata
 #source('./Scripts/01_Extract_Geodata.R')
 
 # GLOBAL ------------------------------------------------------
+
+user <- ""
+key <- ""
 
 dir_data <- "Data"
 dir_dataout <- "Dataout"
@@ -38,6 +42,13 @@ file_covid <- paste0(dir_dataout, "/global_covid_data_", as.Date(Sys.Date(), "%Y
 footnote <- paste0("USAID/OHA/SIEI - HQ Q3 Data Review, ", Sys.Date())
 
 # DATA --------------------------------------------------------
+
+  ## PEPFAR OUs
+  ous <- identify_ouuids(username = user, password = mypwd(key)) 
+
+  ous <- ous %>% 
+    dplyr::filter(!str_detect(country, "Region"), type == "OU") %>% 
+    dplyr::select(-uid)
 
   ## COVID-19 - Global Data
   df_covid <- pull_jhu_covid()
@@ -114,13 +125,20 @@ footnote <- paste0("USAID/OHA/SIEI - HQ Q3 Data Review, ", Sys.Date())
     plot()
   
   spdf_covid <- spdf %>% 
-    left_join(df_covid_cntry, by=c("admin" = "countryname")) 
+    left_join(df_covid_cntry, by=c("admin" = "countryname")) %>% 
+    left_join(ous, by = c("admin" = "country"))
+  
+  spdf_covid %>% 
+    filter(!is.na(type)) %>% 
+    pull(type)
   
   ## Confirmed Cases
   ggplot() +
-    geom_sf(data = gdf, fill = "white", size = .2, color = NA) +
+    geom_sf(data = spdf, fill = "white", size = .2, color = NA) +
     geom_sf(data = spdf_covid, aes(fill = log10(daily_cases + 1)), size = .2) +
-    geom_sf(data = gdf, fill = NA, size = .2, color = grey10k) +
+    geom_sf(data = spdf, fill = NA, size = .2, color = grey10k) +
+    geom_sf_text(data = spdf_covid %>% filter(!is.na(type)), 
+                 aes(label = iso3), color = grey80k, size = 1.5, fontface = "bold") +
     scale_fill_gradient2(
       low = "yellow",
       #mid = "orange",
@@ -148,9 +166,11 @@ footnote <- paste0("USAID/OHA/SIEI - HQ Q3 Data Review, ", Sys.Date())
   
   ## Recoveries
   ggplot() +
-    geom_sf(data = gdf, fill = "white", size = .2, color = NA) +
+    geom_sf(data = spdf, fill = "white", size = .2, color = NA) +
     geom_sf(data = spdf_covid, aes(fill = log10(daily_recoveries + 1)), size = .2) +
-    geom_sf(data = gdf, fill = NA, size = .2, color = grey10k) +
+    geom_sf(data = spdf, fill = NA, size = .2, color = grey10k) +
+    geom_sf_text(data = spdf_covid %>% filter(!is.na(type)), 
+                 aes(label = iso3), color = grey90k, size = 1.5, fontface = "bold") +
     scale_fill_gradient2(
       low = "#edf8e9",
       #mid = "#74c476",
@@ -179,9 +199,11 @@ footnote <- paste0("USAID/OHA/SIEI - HQ Q3 Data Review, ", Sys.Date())
   
   ## Deaths
   ggplot() +
-    geom_sf(data = gdf, fill = "white", size = .2, color = NA) +
+    geom_sf(data = spdf, fill = "white", size = .2, color = NA) +
     geom_sf(data = spdf_covid, aes(fill = log10(daily_deaths + 1)), size = .2) +
-    geom_sf(data = gdf, fill = NA, size = .2, color = grey10k) +
+    geom_sf(data = spdf, fill = NA, size = .2, color = grey10k) +
+    geom_sf_text(data = spdf_covid %>% filter(!is.na(type)), 
+                 aes(label = iso3), color = grey80k, size = 1.5, fontface = "bold") +
     scale_fill_gradient2(
       low = "yellow",
       #mid = "orange",
